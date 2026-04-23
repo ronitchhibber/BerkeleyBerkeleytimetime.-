@@ -1,0 +1,11 @@
+name = "berkeleytime-sync"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+# After running `wrangler kv:namespace create SYNC_KV`, paste the id below.
+[[kv_namespaces]]
+binding = "SYNC_KV"
+id = "836099ccfcd8499ca76cb0481fe6d5c4"
+
+[vars]
+ALLOWED_ORIGIN = "*"

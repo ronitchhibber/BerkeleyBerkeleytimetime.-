@@ -1,0 +1,356 @@
+@import "tailwindcss";
+
+@theme {
+  /* Backgrounds — deep Berkeley navy undertone */
+  --color-bg-primary: #0a0e16;
+  --color-bg-card: #111722;
+  --color-bg-card-hover: #16202e;
+  --color-bg-hover: #16202e;
+  --color-bg-selected: #0e2c4a;
+  --color-bg-input: #0e1420;
+  --color-bg-elevated: #182333;
+  --color-bg-deep: #060911;
+
+  /* Text */
+  --color-text-primary: #f5f1e8;
+  --color-text-secondary: #a8b0bd;
+  --color-text-muted: #5a6478;
+  --color-text-placeholder: #4a5266;
+
+  /* UC Berkeley official palette */
+  --color-berkeley-blue: #003262;       /* Berkeley Blue — primary */
+  --color-berkeley-blue-deep: #001f3d;  /* Deeper Berkeley for atmosphere */
+  --color-founders-rock: #3B7EA1;       /* Founder's Rock — accessible blue accent */
+  --color-cal-gold: #FDB515;            /* California Gold — primary accent */
+  --color-cal-gold-deep: #C4820E;       /* Deeper gold for type accents */
+  --color-medalist: #C4820E;            /* Medalist gold — darker gold */
+  --color-lap-lane: #00B0DA;            /* Lap Lane — cyan accent */
+  --color-pacific: #46535E;             /* Pacific — neutral slate */
+  --color-wellman: #D9661F;             /* Wellman Tile — warm orange */
+  --color-soybean: #859438;             /* Soybean — muted green */
+  --color-sather: #B9D3B6;              /* Sather Gate — sage */
+  --color-bay-fog: #DDD5C7;             /* Bay Fog — cream */
+
+  /* Semantic — using Berkeley palette */
+  --color-accent-blue: #3B7EA1;
+  --color-accent-blue-hover: #58a6ff;
+  --color-accent-gold: #FDB515;
+  --color-accent-green: #859438;
+  --color-accent-red: #D9661F;
+  --color-accent-orange: #C4820E;
+  --color-accent-yellow: #FDB515;
+  --color-accent-cyan: #00B0DA;
+
+  /* Borders */
+  --color-border: #1a2333;
+  --color-border-strong: #2a3548;
+  --color-border-input: #1f2a3d;
+  --color-border-gold: rgba(253, 181, 21, 0.22);
+}
+
+/* Light theme — applied when html.light is set. */
+html.light {
+  --color-bg-primary: #faf8f3;
+  --color-bg-card: #ffffff;
+  --color-bg-card-hover: #f5f1e8;
+  --color-bg-hover: #f5f1e8;
+  --color-bg-selected: #fef3d6;
+  --color-bg-input: #f5f1e8;
+  --color-bg-elevated: #ffffff;
+  --color-bg-deep: #f0ebdb;
+
+  --color-text-primary: #1a2333;
+  --color-text-secondary: #46535e;
+  --color-text-muted: #6c7280;
+  --color-text-placeholder: #9ca3af;
+
+  --color-border: #e5dfd2;
+  --color-border-strong: #c8c0aa;
+  --color-border-input: #d8d2bf;
+  --color-border-gold: rgba(196, 130, 14, 0.3);
+}
+
+html.light body {
+  background: #faf8f3;
+  background-image:
+    radial-gradient(ellipse 100% 60% at 50% -10%, rgba(0, 50, 98, 0.06), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(253, 181, 21, 0.05), transparent 60%);
+}
+
+html.light ::-webkit-scrollbar-thumb { background: rgba(70, 83, 94, 0.2); }
+html.light ::-webkit-scrollbar-thumb:hover { background: rgba(253, 181, 21, 0.5); }
+html.light input[type="time"] { color-scheme: light; }
+
+*, *::before, *::after { box-sizing: border-box; }
+body, h1, h2, h3, h4, h5, h6, p, ul, ol, li, figure, blockquote { margin: 0; }
+
+html {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-size: 14px;
+  line-height: 1.5;
+  font-feature-settings: 'cv11', 'ss01';
+}
+
+body {
+  background: #000;
+  background-image:
+    radial-gradient(ellipse 120% 70% at 50% -10%, rgba(0, 50, 98, 0.32), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(253, 181, 21, 0.06), transparent 60%),
+    radial-gradient(ellipse 40% 30% at 0% 70%, rgba(59, 126, 161, 0.05), transparent 60%);
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+#root { min-height: 100vh; }
+
+::selection { background: rgba(253, 181, 21, 0.3); color: #fff; }
+
+/* Visible focus ring on keyboard nav */
+:focus-visible {
+  outline: 2px solid var(--color-cal-gold);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--color-cal-gold);
+  outline-offset: 2px;
+}
+
+/* Skip-link for keyboard users */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: var(--color-cal-gold);
+  color: var(--color-bg-primary);
+  padding: 8px 16px;
+  z-index: 100;
+  font-weight: 600;
+  text-decoration: none;
+}
+.skip-link:focus { top: 0; }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(168, 176, 189, 0.1); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(253, 181, 21, 0.3); }
+
+input[type="time"] { color-scheme: dark; }
+
+input[type="range"] {
+  -webkit-appearance: none; appearance: none;
+  height: 4px; border-radius: 2px;
+  background: var(--color-border-strong); outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 16px; height: 16px;
+  background: var(--color-cal-gold);
+  cursor: pointer; border-radius: 50%;
+  border: 2px solid var(--color-bg-primary);
+  box-shadow: 0 0 0 1px rgba(253, 181, 21, 0.5), 0 2px 8px rgba(253, 181, 21, 0.2);
+  transition: transform 0.15s ease;
+}
+input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.1); }
+
+input[type="checkbox"] { accent-color: var(--color-cal-gold); }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes drawLine {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+@keyframes risefade {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes goldglow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(253, 181, 21, 0); }
+  50% { box-shadow: 0 0 16px 0 rgba(253, 181, 21, 0.25); }
+}
+@keyframes seal-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-fade-in { animation: fadeIn 0.18s ease-out; }
+.animate-slide-down { animation: slideDown 0.15s ease-out; }
+.animate-rise { animation: risefade 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.animate-draw-line { animation: drawLine 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both; transform-origin: left; }
+.animate-gold-glow { animation: goldglow 2.4s ease-in-out infinite; }
+
+.mono {
+  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-feature-settings: 'liga' 1;
+}
+
+.serif {
+  font-family: 'Fraunces', 'Times New Roman', Georgia, serif;
+  font-feature-settings: 'ss01', 'ss02', 'ss03';
+  font-optical-sizing: auto;
+  letter-spacing: -0.01em;
+}
+
+.serif-italic {
+  font-family: 'Fraunces', 'Times New Roman', Georgia, serif;
+  font-style: italic;
+  font-optical-sizing: auto;
+  font-feature-settings: 'ss01', 'ss02';
+}
+
+/* === Editorial typography utilities === */
+
+/* Eyebrow label — small uppercase mono with gold leader, used above section headlines */
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(253, 181, 21, 0.85);
+}
+.eyebrow::before {
+  content: '';
+  display: block;
+  width: 18px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(253, 181, 21, 0.6));
+}
+
+.eyebrow-plain {
+  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(253, 181, 21, 0.85);
+}
+
+/* Display heading — big serif with subtle italic accent */
+.display {
+  font-family: 'Fraunces', 'Times New Roman', Georgia, serif;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  line-height: 1.02;
+  font-optical-sizing: auto;
+  font-feature-settings: 'ss01', 'ss02';
+}
+
+/* Drop cap for first letter */
+.drop-cap::first-letter {
+  font-family: 'Fraunces', 'Times New Roman', Georgia, serif;
+  font-weight: 600;
+  font-style: italic;
+  font-size: 3.4em;
+  float: left;
+  line-height: 0.85;
+  margin: 0.05em 0.12em 0 0;
+  color: var(--color-cal-gold);
+}
+
+/* Decorative parchment texture for editorial cards */
+.parchment {
+  background-image:
+    radial-gradient(ellipse 70% 80% at 50% 0%, rgba(253, 181, 21, 0.04), transparent 70%),
+    linear-gradient(180deg, rgba(253, 181, 21, 0.02), transparent 40%);
+}
+
+/* Berkeley seal-inspired ornamental dot pattern */
+.berkeley-dots {
+  background-image: radial-gradient(circle, rgba(253, 181, 21, 0.18) 1px, transparent 1px);
+  background-size: 14px 14px;
+  background-position: 0 0;
+}
+
+/* Subtle gold-leaf gradient for elevated surfaces */
+.gold-leaf {
+  background: linear-gradient(135deg, rgba(253, 181, 21, 0.06) 0%, transparent 50%, rgba(196, 130, 14, 0.04) 100%);
+}
+
+/* Subtle film grain for atmosphere on hero areas */
+.film-grain {
+  position: relative;
+}
+.film-grain::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' /%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.4'/%3E%3C/svg%3E");
+  opacity: 0.04;
+  mix-blend-mode: overlay;
+}
+
+/* Vertical campanile-style line motif — used as side accent */
+.campanile-rule {
+  background: linear-gradient(180deg,
+    transparent 0%,
+    rgba(253, 181, 21, 0.4) 15%,
+    rgba(253, 181, 21, 0.6) 50%,
+    rgba(253, 181, 21, 0.4) 85%,
+    transparent 100%);
+}
+
+/* Hero gradient backdrop — Berkeley blue with gold rim */
+.hero-backdrop {
+  background-image:
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(0, 50, 98, 0.6), transparent 70%),
+    radial-gradient(ellipse 30% 50% at 100% 50%, rgba(253, 181, 21, 0.08), transparent 60%),
+    linear-gradient(180deg, var(--color-berkeley-blue-deep) 0%, transparent 100%);
+}
+
+/* Animated shimmer for progress bars */
+.shimmer-gold {
+  background: linear-gradient(
+    90deg,
+    rgba(253, 181, 21, 0.6) 0%,
+    rgba(253, 181, 21, 1) 50%,
+    rgba(253, 181, 21, 0.6) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 3s linear infinite;
+}
+
+/* Editorial divider — gold line that fades */
+.divider-gold {
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(253, 181, 21, 0.4) 20%,
+    rgba(253, 181, 21, 0.4) 80%,
+    transparent);
+}
+
+/* Subtle elevation shadow with gold rim */
+.elevated-card {
+  box-shadow:
+    0 1px 0 0 rgba(253, 181, 21, 0.08) inset,
+    0 8px 24px -8px rgba(0, 0, 0, 0.5),
+    0 2px 8px -2px rgba(0, 50, 98, 0.3);
+}
+
+/* Old-style figures for serif numerals */
+.oldstyle-nums {
+  font-feature-settings: 'onum' 1, 'pnum' 1;
+}
+.tabular-nums {
+  font-feature-settings: 'tnum' 1, 'lnum' 1;
+}

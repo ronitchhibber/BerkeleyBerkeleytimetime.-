@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Daily enrollment refresh via macOS launchd.
+
+  Install:
+    cp data-pipeline/launchd/com.berkeleytime.refresh-enrollment.plist \
+       ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.berkeleytime.refresh-enrollment.plist
+
+  Unload:
+    launchctl unload ~/Library/LaunchAgents/com.berkeleytime.refresh-enrollment.plist
+
+  Runs daily at 03:00 local time. Writes log to /tmp/berkeleytime-refresh.log.
+  Edit PROJECT_DIR below to match your local checkout.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.berkeleytime.refresh-enrollment</string>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/ronitchhibber/Desktop/claude/berkeleytime/data-pipeline</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/npx</string>
+    <string>tsx</string>
+    <string>src/refresh-enrollment.ts</string>
+  </array>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>3</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/berkeleytime-refresh.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/tmp/berkeleytime-refresh.log</string>
+
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+</dict>
+</plist>

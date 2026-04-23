@@ -1,0 +1,44 @@
+# Daily enrollment data refresh.
+# Runs 03:00 America/Los_Angeles (10:00 UTC), fetches latest berkeleytime
+# enrollment, commits updated public/data/courses-summary.json if anything changed.
+
+name: Refresh Enrollment
+
+on:
+  schedule:
+    - cron: '0 10 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install data-pipeline deps
+        working-directory: data-pipeline
+        run: npm ci || npm install
+
+      - name: Refresh enrollment
+        working-directory: data-pipeline
+        run: npx tsx src/refresh-enrollment.ts
+
+      - name: Commit updated data
+        run: |
+          git config user.name "berkeleytime-bot"
+          git config user.email "bot@berkeleytime.local"
+          if git diff --quiet public/data/courses-summary.json; then
+            echo "No changes — skipping commit."
+          else
+            git add public/data/courses-summary.json
+            git commit -m "data: refresh enrollment $(date -u +%Y-%m-%d)"
+            git push
+          fi

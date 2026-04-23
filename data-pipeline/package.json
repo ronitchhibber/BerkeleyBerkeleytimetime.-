@@ -1,0 +1,20 @@
+{
+  "name": "berkeleytime-data-pipeline",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "fetch": "tsx src/main.ts",
+    "fetch:rmp": "tsx src/add-rmp.ts",
+    "refresh:enrollment": "tsx src/refresh-enrollment.ts",
+    "deploy": "cp output/courses.json ../public/data/courses.json"
+  },
+  "dependencies": {
+    "csv-parse": "^5.6.0",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
