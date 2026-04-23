@@ -66,14 +66,28 @@ function addFromRule(rule: RequirementRule, scope: ProgramScope): void {
 
 /**
  * Build the catalog-filter scope for a chosen program.
- * If `groupId` is provided, only that group's requirements contribute.
- * Otherwise we union every group's references.
+ *
+ *   groupId=null,       requirementId=null  → every course in the program
+ *   groupId="lower-..", requirementId=null  → every course in that group
+ *   groupId="lower-..", requirementId="econometrics" → only that requirement's
+ *                                                       course list
+ *
+ * `requirementId` is only honored when `groupId` is set — a requirement id is
+ * not unique across groups in arbitrary programs, so we resolve it within the
+ * chosen group's scope.
  */
-export function buildProgramScope(program: Program, groupId: string | null): ProgramScope {
+export function buildProgramScope(
+  program: Program,
+  groupId: string | null,
+  requirementId: string | null = null,
+): ProgramScope {
   const scope: ProgramScope = { literals: new Set(), ranges: [] }
   for (const g of program.groups) {
     if (groupId && g.id !== groupId) continue
-    for (const req of g.requirements) addFromRule(req.rule, scope)
+    for (const req of g.requirements) {
+      if (groupId && requirementId && req.id !== requirementId) continue
+      addFromRule(req.rule, scope)
+    }
   }
   return scope
 }
@@ -109,5 +123,21 @@ export function groupsWithCourses(program: Program): Program['groups'] {
   return program.groups.filter((g) => {
     const scope = buildProgramScope({ ...program, groups: [g] }, null)
     return scope.literals.size > 0 || scope.ranges.length > 0
+  })
+}
+
+/**
+ * Within a single group, return only the requirements that actually reference
+ * specific courses (specific / choose / category / units rules). This drops
+ * breadth/total-units/etc. lines that don't make sense as a catalog filter.
+ */
+export function requirementsWithCourses(
+  group: Program['groups'][number],
+): Program['groups'][number]['requirements'] {
+  return group.requirements.filter((req) => {
+    const t = req.rule.type
+    if (t === 'specific') return req.rule.courses.length > 0
+    if (t === 'choose' || t === 'category' || t === 'units') return req.rule.from.length > 0
+    return false
   })
 }

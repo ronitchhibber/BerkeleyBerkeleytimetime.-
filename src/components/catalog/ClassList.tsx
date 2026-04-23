@@ -26,18 +26,26 @@ function useActiveFilterChips() {
   const rmpMinRating = useCatalogStore((s) => s.rmpMinRating)
   const selectedProgramId = useCatalogStore((s) => s.selectedProgramId)
   const selectedRequirementGroupId = useCatalogStore((s) => s.selectedRequirementGroupId)
+  const selectedRequirementId = useCatalogStore((s) => s.selectedRequirementId)
   const programs = useGradtrakStore((s) => s.programs)
 
   const chips: { id: string; label: string }[] = []
   if (searchQuery) chips.push({ id: 'search', label: searchQuery })
-  // Program/group chips render first so curriculum scope is the most prominent context.
+  // Curriculum scope renders first (program → group → specific requirement)
+  // so the most-significant context is left-most in the chip strip.
   if (selectedProgramId) {
     const program = programs.find((p) => p.id === selectedProgramId)
     if (program) {
       chips.push({ id: 'program', label: program.name })
       if (selectedRequirementGroupId) {
         const group = program.groups.find((g) => g.id === selectedRequirementGroupId)
-        if (group) chips.push({ id: 'requirementGroup', label: group.name })
+        if (group) {
+          chips.push({ id: 'requirementGroup', label: group.name })
+          if (selectedRequirementId) {
+            const req = group.requirements.find((r) => r.id === selectedRequirementId)
+            if (req) chips.push({ id: 'requirement', label: req.name })
+          }
+        }
       }
     }
   }
@@ -70,6 +78,7 @@ function useActiveFilterChips() {
 function useProgramScope() {
   const selectedProgramId = useCatalogStore((s) => s.selectedProgramId)
   const selectedRequirementGroupId = useCatalogStore((s) => s.selectedRequirementGroupId)
+  const selectedRequirementId = useCatalogStore((s) => s.selectedRequirementId)
   const programs = useGradtrakStore((s) => s.programs)
   return useMemo(() => {
     if (!selectedProgramId) return null
@@ -78,8 +87,11 @@ function useProgramScope() {
     const group = selectedRequirementGroupId
       ? program.groups.find((g) => g.id === selectedRequirementGroupId) ?? null
       : null
-    return { program, group }
-  }, [programs, selectedProgramId, selectedRequirementGroupId])
+    const requirement = group && selectedRequirementId
+      ? group.requirements.find((r) => r.id === selectedRequirementId) ?? null
+      : null
+    return { program, group, requirement }
+  }, [programs, selectedProgramId, selectedRequirementGroupId, selectedRequirementId])
 }
 
 export default function ClassList() {
@@ -187,6 +199,11 @@ export default function ClassList() {
               {programScope.group && (
                 <p className="mt-0.5 mono text-[10.5px] uppercase tracking-[0.12em] text-text-muted/85">
                   · {programScope.group.name}
+                  {programScope.requirement && (
+                    <span className="ml-1.5 serif text-[11px] normal-case italic text-cal-gold/85">
+                      › {programScope.requirement.name}
+                    </span>
+                  )}
                 </p>
               )}
             </div>

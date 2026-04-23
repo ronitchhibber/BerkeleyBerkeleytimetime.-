@@ -35,18 +35,19 @@ export function useFilteredCourses(): Course[] {
   const rmpMinRating = useCatalogStore((s) => s.rmpMinRating)
   const selectedProgramId = useCatalogStore((s) => s.selectedProgramId)
   const selectedRequirementGroupId = useCatalogStore((s) => s.selectedRequirementGroupId)
+  const selectedRequirementId = useCatalogStore((s) => s.selectedRequirementId)
   const programs = useGradtrakStore((s) => s.programs)
 
   const debouncedSearch = useDebounce(searchQuery, 300)
 
-  // Build the program scope once per program/group change. Doing it inside the
-  // filter loop would re-walk the program tree for every course (O(courses × reqs)).
+  // Build the program scope once per program/group/requirement change. Doing
+  // it inside the filter loop would re-walk the program tree for every course.
   const programScope = useMemo(() => {
     if (!selectedProgramId) return null
     const program = programs.find((p) => p.id === selectedProgramId)
     if (!program) return null
-    return buildProgramScope(program, selectedRequirementGroupId)
-  }, [programs, selectedProgramId, selectedRequirementGroupId])
+    return buildProgramScope(program, selectedRequirementGroupId, selectedRequirementId)
+  }, [programs, selectedProgramId, selectedRequirementGroupId, selectedRequirementId])
 
   return useMemo(() => {
     const result = courses.filter((c) => {

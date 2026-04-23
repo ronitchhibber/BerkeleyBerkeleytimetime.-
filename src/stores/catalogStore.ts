@@ -20,11 +20,15 @@ interface CatalogState {
   // 0 = no filter; otherwise show only courses with RMP rating ≥ this number
   rmpMinRating: number
 
-  // Curriculum scope: pick a major/minor/cert, optionally narrow to one of its
-  // requirement groups (e.g. "Lower-Division Prerequisites"). Filters the
-  // catalog to courses that count toward the chosen program/group.
+  // Curriculum scope, three-level drill-down:
+  //   program        → all courses that count toward a major/minor/cert
+  //   group          → narrow to one bucket within the program (e.g. "Lower Division")
+  //   requirement    → narrow to one specific line item (e.g. "Econometrics")
+  // Each lower level is meaningless without the one above, so the setters
+  // clear downstream selections atomically.
   selectedProgramId: string | null
   selectedRequirementGroupId: string | null
+  selectedRequirementId: string | null
 
   selectedCourseId: string | null
   activeDetailTab: DetailTab
@@ -44,6 +48,7 @@ interface CatalogState {
   setRmpMinRating: (rating: number) => void
   setSelectedProgramId: (id: string | null) => void
   setSelectedRequirementGroupId: (id: string | null) => void
+  setSelectedRequirementId: (id: string | null) => void
   selectCourse: (id: string | null) => void
   setActiveDetailTab: (tab: DetailTab) => void
   resetFilters: () => void
@@ -69,6 +74,7 @@ const initialFilters = {
   rmpMinRating: 0,
   selectedProgramId: null as string | null,
   selectedRequirementGroupId: null as string | null,
+  selectedRequirementId: null as string | null,
 }
 
 function toggleInSet<T>(set: Set<T>, value: T): Set<T> {
@@ -107,9 +113,12 @@ export const useCatalogStore = create<CatalogState>((set) => ({
   setTimeRange: (from, to) => set({ timeRange: { from, to } }),
   setRmpMinRating: (rating) => set({ rmpMinRating: rating }),
   setSelectedProgramId: (id) =>
-    // Switching programs invalidates the previously-chosen group.
-    set({ selectedProgramId: id, selectedRequirementGroupId: null }),
-  setSelectedRequirementGroupId: (id) => set({ selectedRequirementGroupId: id }),
+    // Switching programs invalidates the chosen group AND requirement.
+    set({ selectedProgramId: id, selectedRequirementGroupId: null, selectedRequirementId: null }),
+  setSelectedRequirementGroupId: (id) =>
+    // Switching groups invalidates the chosen specific requirement.
+    set({ selectedRequirementGroupId: id, selectedRequirementId: null }),
+  setSelectedRequirementId: (id) => set({ selectedRequirementId: id }),
   selectCourse: (id) => set({ selectedCourseId: id, activeDetailTab: 'Overview' }),
   setActiveDetailTab: (tab) => set({ activeDetailTab: tab }),
   resetFilters: () => set({ ...initialFilters }),
@@ -161,9 +170,11 @@ export const useCatalogStore = create<CatalogState>((set) => ({
       }
       if (chipId === 'time') return { timeRange: { from: null, to: null } }
       if (chipId === 'rmp') return { rmpMinRating: 0 }
-      // Removing the program chip drops the group too — group is meaningless without a program.
-      if (chipId === 'program') return { selectedProgramId: null, selectedRequirementGroupId: null }
-      if (chipId === 'requirementGroup') return { selectedRequirementGroupId: null }
+      // Removing a higher-level chip drops everything below it — those
+      // selections only make sense in the parent's context.
+      if (chipId === 'program') return { selectedProgramId: null, selectedRequirementGroupId: null, selectedRequirementId: null }
+      if (chipId === 'requirementGroup') return { selectedRequirementGroupId: null, selectedRequirementId: null }
+      if (chipId === 'requirement') return { selectedRequirementId: null }
       return {}
     }),
 }))

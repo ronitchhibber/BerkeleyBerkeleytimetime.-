@@ -87,7 +87,16 @@ export async function fetchExtract(query: string): Promise<AskFilters> {
   return filters
 }
 
-export async function fetchRank(topicQuery: string, candidates: { id: string; code: string; title: string; description?: string }[]): Promise<RankedHit[]> {
+export interface RankCandidate {
+  id: string
+  code: string
+  title: string
+  description?: string
+  instructor?: string
+  averageGrade?: string
+}
+
+export async function fetchRank(topicQuery: string, candidates: RankCandidate[]): Promise<RankedHit[]> {
   if (!API) throw new Error('AI search not configured')
   const res = await fetch(`${API}/api/ai/rank`, {
     method: 'POST',

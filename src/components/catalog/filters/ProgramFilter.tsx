@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useCatalogStore } from '@/stores/catalogStore'
 import { useGradtrakStore } from '@/stores/gradtrakStore'
-import { groupsWithCourses } from '@/utils/programFilterUtils'
+import { groupsWithCourses, requirementsWithCourses } from '@/utils/programFilterUtils'
 import type { Program } from '@/types/gradtrak'
 
 const TYPE_LABEL: Record<Program['type'], string> = {
@@ -29,8 +29,10 @@ export default function ProgramFilter() {
 
   const selectedProgramId = useCatalogStore((s) => s.selectedProgramId)
   const selectedRequirementGroupId = useCatalogStore((s) => s.selectedRequirementGroupId)
+  const selectedRequirementId = useCatalogStore((s) => s.selectedRequirementId)
   const setSelectedProgramId = useCatalogStore((s) => s.setSelectedProgramId)
   const setSelectedRequirementGroupId = useCatalogStore((s) => s.setSelectedRequirementGroupId)
+  const setSelectedRequirementId = useCatalogStore((s) => s.setSelectedRequirementId)
 
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -74,7 +76,41 @@ export default function ProgramFilter() {
     () => (selectedProgram ? groupsWithCourses(selectedProgram) : []),
     [selectedProgram]
   )
-  const selectedGroup = requirementGroups.find((g) => g.id === selectedRequirementGroupId) ?? null
+  // For each group, also extract the actionable requirement leaves so we can
+  // show every requirement in the program at one click — no "drill into the
+  // group first" trip required.
+  const groupedRequirements = useMemo(
+    () => requirementGroups.map((g) => ({ group: g, requirements: requirementsWithCourses(g) })),
+    [requirementGroups]
+  )
+  const isAllSelected = !selectedRequirementGroupId && !selectedRequirementId
+
+  /**
+   * Click a group header → restrict to "every requirement in this group",
+   * clearing any specific requirement leaf. Click again on the same active
+   * group to clear back to "all requirements".
+   */
+  const handleGroupClick = (groupId: string) => {
+    if (selectedRequirementGroupId === groupId && !selectedRequirementId) {
+      setSelectedRequirementGroupId(null)
+    } else {
+      setSelectedRequirementGroupId(groupId)
+    }
+  }
+
+  /**
+   * Click a requirement pill → restrict to that single requirement. Persist
+   * its parent group id alongside so removing the requirement chip falls back
+   * to "the rest of this group" rather than the whole program.
+   */
+  const handleRequirementClick = (groupId: string, requirementId: string) => {
+    if (selectedRequirementId === requirementId) {
+      setSelectedRequirementId(null)
+    } else {
+      setSelectedRequirementGroupId(groupId)
+      setSelectedRequirementId(requirementId)
+    }
+  }
 
   const totalMatches = TYPE_ORDER.reduce((acc, t) => acc + grouped[t].length, 0)
 
@@ -177,46 +213,98 @@ export default function ProgramFilter() {
         )}
       </div>
 
-      {/* === Requirement-group select (only when a program is chosen) === */}
-      {selectedProgram && requirementGroups.length > 0 && (
-        <div className="animate-fade-in space-y-1.5 rounded-md border border-cal-gold/15 bg-cal-gold/[0.025] px-2.5 py-2.5">
-          <label className="mono flex items-center justify-between text-[9.5px] font-bold uppercase tracking-[0.18em] text-cal-gold/85">
-            <span>Within program</span>
-            {selectedGroup && (
+      {/* === Drill-down: group headers + requirement leaf pills === */}
+      {selectedProgram && groupedRequirements.length > 0 && (
+        <div className="animate-fade-in space-y-3 rounded-md border border-cal-gold/15 bg-cal-gold/[0.025] px-3 py-3">
+          <div className="flex items-center justify-between">
+            <span className="mono text-[9.5px] font-bold uppercase tracking-[0.18em] text-cal-gold/85">
+              Within program
+            </span>
+            {!isAllSelected && (
               <button
-                onClick={() => setSelectedRequirementGroupId(null)}
-                className="text-[9px] tracking-[0.14em] text-text-muted transition-colors hover:text-cal-gold"
+                onClick={() => {
+                  setSelectedRequirementGroupId(null)
+                  setSelectedRequirementId(null)
+                }}
+                className="mono text-[9px] font-semibold uppercase tracking-[0.14em] text-text-muted transition-colors hover:text-cal-gold"
               >
                 Show all
               </button>
             )}
-          </label>
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              onClick={() => setSelectedRequirementGroupId(null)}
-              className={`mono rounded-full px-2.5 py-1 text-[10.5px] font-semibold tracking-tight transition-colors ${
-                !selectedRequirementGroupId
-                  ? 'bg-cal-gold text-bg-primary'
-                  : 'border border-border-strong bg-bg-card text-text-secondary hover:border-cal-gold/40 hover:text-cal-gold'
-              }`}
-            >
-              All requirements
-            </button>
-            {requirementGroups.map((g) => {
-              const active = g.id === selectedRequirementGroupId
+          </div>
+
+          {/* "All requirements" — the default, every course in the program */}
+          <button
+            onClick={() => {
+              setSelectedRequirementGroupId(null)
+              setSelectedRequirementId(null)
+            }}
+            className={`mono w-full rounded-md px-2.5 py-1.5 text-left text-[10.5px] font-bold uppercase tracking-[0.16em] transition-colors ${
+              isAllSelected
+                ? 'bg-cal-gold text-bg-primary'
+                : 'border border-border-strong/70 bg-bg-card text-text-secondary hover:border-cal-gold/40 hover:text-cal-gold'
+            }`}
+          >
+            All requirements
+          </button>
+
+          {/* Each group renders as: clickable header + its requirement pills */}
+          <div className="space-y-3">
+            {groupedRequirements.map(({ group, requirements }) => {
+              const groupActive = group.id === selectedRequirementGroupId && !selectedRequirementId
               return (
-                <button
-                  key={g.id}
-                  onClick={() => setSelectedRequirementGroupId(g.id)}
-                  title={g.description ?? g.name}
-                  className={`rounded-full px-2.5 py-1 text-[11px] tracking-tight transition-colors ${
-                    active
-                      ? 'bg-cal-gold text-bg-primary'
-                      : 'border border-border-strong bg-bg-card text-text-secondary hover:border-cal-gold/40 hover:text-cal-gold'
-                  }`}
-                >
-                  <span className={active ? 'serif italic font-semibold' : 'serif'}>{g.name}</span>
-                </button>
+                <div key={group.id} className="space-y-1.5">
+                  <button
+                    onClick={() => handleGroupClick(group.id)}
+                    title={group.description ?? group.name}
+                    className={`group/h flex w-full items-baseline gap-2 text-left transition-colors`}
+                  >
+                    <span
+                      className={`mono text-[9px] font-bold uppercase tracking-[0.2em] transition-colors ${
+                        groupActive
+                          ? 'text-cal-gold'
+                          : 'text-text-muted/85 group-hover/h:text-cal-gold/85'
+                      }`}
+                    >
+                      {group.name}
+                    </span>
+                    <div
+                      className={`h-px flex-1 transition-colors ${
+                        groupActive ? 'bg-cal-gold/45' : 'bg-border-strong/45 group-hover/h:bg-cal-gold/30'
+                      }`}
+                    />
+                    <span
+                      className={`mono text-[9px] tabular-nums transition-colors ${
+                        groupActive ? 'text-cal-gold/85' : 'text-text-muted/55'
+                      }`}
+                    >
+                      {requirements.length}
+                    </span>
+                  </button>
+                  {requirements.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {requirements.map((req) => {
+                        const reqActive = req.id === selectedRequirementId
+                        return (
+                          <button
+                            key={req.id}
+                            onClick={() => handleRequirementClick(group.id, req.id)}
+                            title={req.description ?? req.name}
+                            className={`rounded-full px-2.5 py-1 text-[11px] leading-tight tracking-tight transition-colors ${
+                              reqActive
+                                ? 'bg-cal-gold text-bg-primary'
+                                : 'border border-border-strong/70 bg-bg-card text-text-secondary hover:border-cal-gold/40 hover:text-cal-gold'
+                            }`}
+                          >
+                            <span className={reqActive ? 'serif italic font-semibold' : 'serif'}>
+                              {req.name}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
               )
             })}
           </div>

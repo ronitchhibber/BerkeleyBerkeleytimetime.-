@@ -44,6 +44,14 @@ interface RankCandidate {
   code: string
   title: string
   description?: string
+  // Optional signal fields the frontend may pass to help the ranker:
+  //   instructor   — present so "with Joseph Gonzalez" is matchable even
+  //                  though descriptions don't list instructors.
+  //   averageGrade — letter grade (A, A-, B+, …); a B or better hints
+  //                  "easy", a C+ or below hints "hard", for "easy"/"hard"
+  //                  intent queries.
+  instructor?: string
+  averageGrade?: string
 }
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages'
@@ -144,23 +152,53 @@ Return ONLY this JSON (no markdown, no commentary):
   "topicQuery": "..."
 }`
 
-const RANK_SYSTEM = `You are a Berkeleytime course-search assistant. Given a topical query and a list of candidate Berkeley courses, return ONLY courses that are GENUINELY about the topic.
+const RANK_SYSTEM = `You are a Berkeley course-search assistant. Given a student's topical request and a list of candidate Berkeley courses, return ONLY the courses that genuinely fit what the student asked for.
 
-Hard rules:
+== TOPICAL FIT — strict ==
 - DO NOT stretch to find tenuous connections. Tangentially-related ≠ a match.
-- DO NOT include a course just because it shares a keyword in the title.
-- A course must DIRECTLY address the topic in its title or description to count.
-- If NO candidate genuinely matches, return { "ranked": [] }. It is better to return zero matches than fake ones.
-- Score 0.7+ = strong match (course is centrally about the topic).
-- Score 0.5-0.7 = solid match (significant chunk of the course covers the topic).
-- Below 0.5: omit entirely.
+- DO NOT include a course just because a keyword appears in the title.
+- A course must DIRECTLY address the topic in its title or description.
+- If NO candidate genuinely matches, return { "ranked": [] }. Empty is correct
+  and expected when the catalog has no good options.
 
-For each kept candidate, write a 1-sentence reason starting with a capital letter and ending with a period. The reason must point to specific content (titles, topics, descriptions) — never speculate ("might cover", "could be relevant").
+== USING THE EXTRA SIGNALS ==
+Each candidate may include "instructor" and "averageGrade". Use them when the
+student's request implies a constraint that descriptions don't capture:
 
-Return ONLY a JSON object (no markdown, no commentary):
+  • Instructor request — when the topic mentions a professor by name
+    (e.g. "with Joseph Gonzalez", "taught by Hilfinger"), STRONGLY prefer
+    candidates whose instructor field matches that name (case-insensitive,
+    partial-match OK). A topical match without the right instructor should
+    score lower than the right instructor with a topical match.
+
+  • "Easy" intent — when the student asks for "easy", "low workload",
+    "fun breadth", "GPA boost", etc., use averageGrade as a proxy:
+      A, A-       → easy (boost score)
+      A- to B+    → moderate
+      B and below → hard (penalize for "easy" requests)
+    Combine with topic — DO NOT recommend an "easy" course that is off-topic.
+
+  • "Hard"/"challenging" intent — invert the above.
+
+  • If the request is purely topical (no easy/hard/instructor language),
+    ignore the signals and rank on topical fit alone.
+
+== SCORING ==
+- 0.7+ = strong match (centrally on-topic AND any explicit constraints met).
+- 0.5-0.7 = solid match (significantly on-topic).
+- Below 0.5 → omit entirely.
+
+== "WHY" SENTENCE ==
+For each kept candidate, write a single sentence that points to specific
+content (named topics, titles, instructors, etc.). Never speculate
+("might cover", "could be relevant"). Capital letter, period at end.
+If you used a non-topical signal (instructor, grade), you may briefly note it.
+
+== OUTPUT ==
+Return ONLY this JSON (no markdown, no commentary):
 { "ranked": [ { "id": string, "score": number, "why": string }, ... ] }
 
-Sort by score descending. Maximum 8 results. Empty array is a valid and often correct answer.`
+Sort by score descending. Maximum 8 results.`
 
 async function aiSearch(env: Env, query: string): Promise<AskFilters> {
   const text = await callAnthropic(env, EXTRACT_SYSTEM, query, 600)

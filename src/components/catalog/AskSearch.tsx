@@ -26,21 +26,19 @@ const SUGGESTIONS = [
 
 /**
  * Apply ONLY the hard filters the AI flagged as explicitly stated by the
- * student. The AI prompt is now strict: subjects/breadths/rmp/level/units only
- * appear when the student literally named them. Keywords stay invisible — they
- * exist solely to widen the candidate pool the ranker sees, not to clutter
- * the catalog with surprise chips ("why is RMP > 4 selected when I never
- * asked for that?").
+ * student. The AI prompt is strict: subjects/rmp/level/units only appear when
+ * the student literally named them. Keywords stay invisible — they exist
+ * solely to widen the candidate pool the ranker sees.
+ *
+ * NOTE: breadths intentionally skipped here. The current scrape doesn't
+ * populate course.requirements.{lsBreadth,universityReqs}, so applying a
+ * breadth chip would always zero out the catalog. Breadth intent is forwarded
+ * to the ranker via the topic query instead.
  */
 function applyFiltersToStore(filters: AskFilters) {
   const cs = useCatalogStore.getState()
   cs.resetFilters()
   for (const s of filters.subjects) cs.toggleMajor(s)
-  for (const b of filters.breadths) {
-    if (b === 'American Cultures') cs.toggleRequirement('universityReqs', 'American Cultures')
-    else if (b.startsWith('Reading and Composition')) cs.toggleRequirement('universityReqs', b)
-    else cs.toggleRequirement('lsBreadth', b)
-  }
   if (filters.rmpMin !== null) cs.setRmpMinRating(Math.max(0, Math.min(5, filters.rmpMin)))
   if (filters.level) cs.toggleClassLevel(filters.level)
   if (filters.unitsMin !== null || filters.unitsMax !== null) {
@@ -102,22 +100,15 @@ export default function AskSearch() {
     const allCourses = useDataStore.getState().courses
 
     const subjectsUpper = new Set(filters.subjects.map((s) => s.toUpperCase().trim()))
-    const breadthsLower = new Set(filters.breadths.map((b) => b.toLowerCase()))
     const keywords = filters.keywords.map((k) => k.toLowerCase().trim()).filter(Boolean)
 
-    // Pass 1: apply hard constraints only.
+    // Pass 1: apply hard constraints we actually have data for. Breadths are
+    // forwarded via topicQuery instead of filtered here (see NOTE in
+    // applyFiltersToStore).
     const hardFiltered = allCourses.filter((c) => {
       if (subjectsUpper.size > 0) {
         const subj = (c.code || '').split(' ')[0].toUpperCase()
         if (!subjectsUpper.has(subj)) return false
-      }
-      if (breadthsLower.size > 0) {
-        const courseBreadths = (c.requirements?.lsBreadth ?? []).map((b) => b.toLowerCase())
-        const ac = (c.requirements?.universityReqs ?? []).map((r) => r.toLowerCase())
-        if (
-          !courseBreadths.some((b) => breadthsLower.has(b)) &&
-          !ac.some((r) => breadthsLower.has(r))
-        ) return false
       }
       if (filters.rmpMin !== null && (c.rmpRating?.avgRating ?? 0) < filters.rmpMin) return false
       if (filters.level && c.level !== filters.level) return false
@@ -127,14 +118,17 @@ export default function AskSearch() {
     // Pass 2: score by keyword match strength against title + description.
     // Title hits weight 3× description hits — a course with the term in its
     // name is almost always more relevant than one that mentions it in passing.
+    //
+    // Fallback discipline: the ranker is the brain. If keyword scoring is
+    // weak (few hits) we BACKFILL with hard-filtered courses so the ranker
+    // always sees a real candidate set. This fixes "AC requirement that's
+    // actually interesting" (where AC courses don't all contain keyword text)
+    // and "with Joseph Gonzalez" (where instructor names aren't in
+    // descriptions) — both should surface candidates, then let the ranker
+    // judge.
     type Scored = { course: (typeof allCourses)[number]; score: number }
-    let pool: Scored[]
-    if (keywords.length === 0) {
-      // No keywords (rare — only when the AI returned nothing topical).
-      // Fall back to the hard-filtered set, capped.
-      pool = hardFiltered.slice(0, 80).map((c) => ({ course: c, score: 0 }))
-    } else {
-      const scored: Scored[] = []
+    const scored: Scored[] = []
+    if (keywords.length > 0) {
       for (const c of hardFiltered) {
         const title = (c.title || '').toLowerCase()
         const desc = (c.description || '').toLowerCase()
@@ -147,7 +141,21 @@ export default function AskSearch() {
         if (s > 0) scored.push({ course: c, score: s })
       }
       scored.sort((a, b) => b.score - a.score)
-      pool = scored.slice(0, 80)
+    }
+
+    const POOL_TARGET = 80
+    const pool: Scored[] = scored.slice(0, POOL_TARGET)
+    if (pool.length < POOL_TARGET) {
+      const seen = new Set(pool.map((p) => p.course.id))
+      // Backfill from hardFiltered. Prefer recognizable / popular courses by
+      // sorting fallbacks by enrollment percent (rough proxy for relevance).
+      const fallbacks = hardFiltered
+        .filter((c) => !seen.has(c.id))
+        .sort((a, b) => (b.enrollmentPercent ?? 0) - (a.enrollmentPercent ?? 0))
+      for (const c of fallbacks) {
+        pool.push({ course: c, score: 0 })
+        if (pool.length >= POOL_TARGET) break
+      }
     }
 
     const candidates = pool.map(({ course }) => ({
@@ -155,15 +163,27 @@ export default function AskSearch() {
       code: course.code,
       title: course.title,
       description: (course.description ?? '').slice(0, 500),
+      // Pass instructor + grade so the ranker can honor "with X" or "easy"
+      // prompts that never show up in the description text.
+      instructor: course.instructor || undefined,
+      averageGrade: course.averageGrade || undefined,
     }))
 
     if (candidates.length === 0) {
       setRanking(false)
-      setError('No courses matched those terms')
+      setError('No courses match these constraints')
       return
     }
+    // Enrich the topic with constraints the ranker should honor but that
+    // didn't reach the catalog as filters. The original student wording is
+    // included verbatim — that's what the ranker should optimize for.
+    const enrichedTopic = [
+      filters.topicQuery,
+      filters.breadths.length > 0 ? `Must satisfy breadth: ${filters.breadths.join(', ')}.` : null,
+      `Original student request: "${q}"`,
+    ].filter(Boolean).join(' ')
     try {
-      const hits = await fetchRank(filters.topicQuery, candidates)
+      const hits = await fetchRank(enrichedTopic, candidates)
       setRanked(hits)
       if (hits.length === 0) setError('No strong matches in the catalog')
     } catch (e) {
