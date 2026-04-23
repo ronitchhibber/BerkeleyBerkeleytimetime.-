@@ -4,14 +4,31 @@ import type {
   Program, RequirementRule, RequirementProgress, GroupProgress, ProgramProgress,
 } from '@/types/gradtrak'
 
+/**
+ * Normalize a course code into a single canonical form.
+ *
+ * Berkeley's catalog uses tight 6-letter subject codes (CYPLAN, ENVDES,
+ * POLSCI, PUBPOL, COMLIT, MECENG, CIVENG, INDENG, BIOENG, MATSCI,
+ * HISTART, LDARCH, NUCENG, ...). Program / transcript data sometimes shows
+ * the same subject spaced out for readability ("CY PLAN 110", "ENV DES 1",
+ * "POL SCI 137"). Collapse all whitespace in the subject portion so both
+ * forms compare equal.
+ *
+ * Course numbers may be prefixed with a single letter (C cross-listed,
+ * H honors, N concurrent, R reading & comp, W online), e.g. "ECON C3",
+ * "PUBPOL R1A". That space is preserved.
+ */
 function normalizeCode(code: string): string {
-  return code.replace(/\s+/g, ' ').trim().toUpperCase()
+  const upper = code.replace(/\s+/g, ' ').trim().toUpperCase()
+  const m = upper.match(/^(.+?)\s+([A-Z]?\d+[A-Z]*)$/)
+  if (!m) return upper
+  return m[1].replace(/\s+/g, '') + ' ' + m[2]
 }
 
 function parseRange(pattern: string): { subject: string; min: number; max: number } | null {
   const m = pattern.match(/^([A-Z][A-Z\s,&]*)\s*(\d+[A-Z]*)\s*-\s*(\d+[A-Z]*)$/i)
   if (!m) return null
-  const subject = m[1].trim().toUpperCase()
+  const subject = m[1].trim().toUpperCase().replace(/\s+/g, '')
   const min = parseInt(m[2])
   const max = parseInt(m[3])
   if (isNaN(min) || isNaN(max)) return null
@@ -21,7 +38,7 @@ function parseRange(pattern: string): { subject: string; min: number; max: numbe
 function parseWildcard(pattern: string): { subject: string; numberPattern: string } | null {
   const m = pattern.match(/^([A-Z][A-Z\s,&]*)\s+(\d+\?+|\?+)$/i)
   if (!m) return null
-  return { subject: m[1].trim().toUpperCase(), numberPattern: m[2] }
+  return { subject: m[1].trim().toUpperCase().replace(/\s+/g, ''), numberPattern: m[2] }
 }
 
 function courseMatchesPattern(courseCode: string, pattern: string): boolean {

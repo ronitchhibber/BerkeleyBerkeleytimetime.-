@@ -12,6 +12,8 @@ const TYPE_THEME = {
   major: { badge: 'bg-cal-gold/15 text-cal-gold ring-1 ring-cal-gold/30', ring: '#FDB515', text: 'text-cal-gold' },
   minor: { badge: 'bg-founders-rock/15 text-founders-rock ring-1 ring-founders-rock/30', ring: '#3B7EA1', text: 'text-founders-rock' },
   college: { badge: 'bg-soybean/15 text-soybean ring-1 ring-soybean/30', ring: '#859438', text: 'text-soybean' },
+  certificate: { badge: 'bg-lap-lane/15 text-lap-lane ring-1 ring-lap-lane/30', ring: '#00B0DA', text: 'text-lap-lane' },
+  university: { badge: 'bg-medalist/15 text-medalist ring-1 ring-medalist/30', ring: '#C4820E', text: 'text-medalist' },
 } as const
 
 export default function ProgramProgressView() {

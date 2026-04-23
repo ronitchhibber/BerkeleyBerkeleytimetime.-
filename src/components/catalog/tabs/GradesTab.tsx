@@ -1,14 +1,17 @@
 import { useState, useMemo } from 'react'
-import type { GradeRecord } from '@/types'
+import { useCourseDetail } from '@/stores/dataStore'
 import Dropdown from '@/components/ui/Dropdown'
 import GradeDistributionChart from '@/components/catalog/charts/GradeDistributionChart'
 import GradeHistoryTable from '@/components/catalog/charts/GradeHistoryTable'
 
 interface GradesTabProps {
-  gradeHistory: GradeRecord[]
+  courseId: string
 }
 
-export default function GradesTab({ gradeHistory }: GradesTabProps) {
+export default function GradesTab({ courseId }: GradesTabProps) {
+  const detail = useCourseDetail(courseId)
+  const isLoading = !detail
+  const gradeHistory = detail?.gradeHistory ?? []
   const [selectedInstructor, setSelectedInstructor] = useState('all')
   const [selectedSemester, setSelectedSemester] = useState('all')
 
@@ -43,6 +46,13 @@ export default function GradesTab({ gradeHistory }: GradesTabProps) {
     return { distribution: totals, totalEnrolled }
   }, [filteredRecords])
 
+  if (isLoading) {
+    return (
+      <div className="flex h-72 items-center justify-center px-8">
+        <p className="text-[13px] text-text-muted">Loading grade history…</p>
+      </div>
+    )
+  }
   if (gradeHistory.length === 0) {
     return (
       <div className="flex h-72 items-center justify-center px-8">

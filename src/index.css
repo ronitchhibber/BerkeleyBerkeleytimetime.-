@@ -48,39 +48,6 @@
   --color-border-gold: rgba(253, 181, 21, 0.22);
 }
 
-/* Light theme — applied when html.light is set. */
-html.light {
-  --color-bg-primary: #faf8f3;
-  --color-bg-card: #ffffff;
-  --color-bg-card-hover: #f5f1e8;
-  --color-bg-hover: #f5f1e8;
-  --color-bg-selected: #fef3d6;
-  --color-bg-input: #f5f1e8;
-  --color-bg-elevated: #ffffff;
-  --color-bg-deep: #f0ebdb;
-
-  --color-text-primary: #1a2333;
-  --color-text-secondary: #46535e;
-  --color-text-muted: #6c7280;
-  --color-text-placeholder: #9ca3af;
-
-  --color-border: #e5dfd2;
-  --color-border-strong: #c8c0aa;
-  --color-border-input: #d8d2bf;
-  --color-border-gold: rgba(196, 130, 14, 0.3);
-}
-
-html.light body {
-  background: #faf8f3;
-  background-image:
-    radial-gradient(ellipse 100% 60% at 50% -10%, rgba(0, 50, 98, 0.06), transparent 70%),
-    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(253, 181, 21, 0.05), transparent 60%);
-}
-
-html.light ::-webkit-scrollbar-thumb { background: rgba(70, 83, 94, 0.2); }
-html.light ::-webkit-scrollbar-thumb:hover { background: rgba(253, 181, 21, 0.5); }
-html.light input[type="time"] { color-scheme: light; }
-
 *, *::before, *::after { box-sizing: border-box; }
 body, h1, h2, h3, h4, h5, h6, p, ul, ol, li, figure, blockquote { margin: 0; }
 

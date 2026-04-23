@@ -28,9 +28,8 @@ interface TooltipPayload {
 interface PhaseDef { date: string; label: string; color: string }
 const PHASES: PhaseDef[] = [
   { date: '2026-04-13', label: 'Phase I', color: '#3B7EA1' },
-  { date: '2026-07-06', label: 'Phase II', color: '#FDB515' },
-  { date: '2026-08-03', label: 'Adjustment', color: '#859438' },
-  { date: '2026-08-26', label: 'Classes Begin', color: '#D9661F' },
+  { date: '2026-07-20', label: 'Phase II', color: '#FDB515' },
+  { date: '2026-08-16', label: 'Adjustment', color: '#859438' },
 ]
 
 function CustomTooltip({ active, payload, showAsCount }: { active?: boolean; payload?: TooltipPayload[]; showAsCount: boolean }) {
@@ -120,7 +119,7 @@ export default function EnrollmentChart({ data, showPhases, showAsCount }: Enrol
           strokeWidth={2}
           dot={false}
           activeDot={{ r: 4, fill: '#FDB515', stroke: '#0a0e16', strokeWidth: 2 }}
-          animationDuration={500}
+          animationDuration={180}
         />
       </LineChart>
     </ResponsiveContainer>

@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useDataStore, useCourseDetail } from '@/stores/dataStore'
+import { useDataStore, useTermLabel } from '@/stores/dataStore'
 import { useCatalogStore } from '@/stores/catalogStore'
 import type { DetailTab } from '@/types'
 import Tabs from '@/components/ui/Tabs'
@@ -13,6 +13,7 @@ import EnrollmentTab from './tabs/EnrollmentTab'
 const tabList: DetailTab[] = ['Overview', 'Sections', 'Ratings', 'Grades', 'Enrollment']
 
 function EmptyState() {
+  const termLabel = useTermLabel()
   return (
     <div className="relative flex h-full items-center justify-center overflow-hidden hero-backdrop film-grain">
       {/* Decorative orbiting seal */}
@@ -45,7 +46,7 @@ function EmptyState() {
         <div className="mt-8 flex items-center justify-center gap-5 text-[10.5px] mono uppercase tracking-[0.18em] text-text-muted/60">
           <span>5,600+ classes</span>
           <span className="h-1 w-1 rounded-full bg-cal-gold/40" />
-          <span>Fall 2026</span>
+          <span>{termLabel}</span>
           <span className="h-1 w-1 rounded-full bg-cal-gold/40" />
           <span>Daily refresh</span>
         </div>
@@ -62,7 +63,6 @@ export default function ClassDetailPanel() {
   const loadCourseDetail = useDataStore((s) => s.loadCourseDetail)
 
   const course = selectedCourseId ? getCourseById(selectedCourseId) : undefined
-  const detail = useCourseDetail(selectedCourseId)
 
   useEffect(() => {
     if (selectedCourseId) loadCourseDetail(selectedCourseId)
@@ -84,7 +84,7 @@ export default function ClassDetailPanel() {
         {activeDetailTab === 'Overview' && <OverviewTab course={course} />}
         {activeDetailTab === 'Sections' && <SectionsTab sections={course.sections} />}
         {activeDetailTab === 'Ratings' && <RatingsTab rating={course.rmpRating} instructor={course.instructor} />}
-        {activeDetailTab === 'Grades' && <GradesTab gradeHistory={detail?.gradeHistory ?? []} />}
+        {activeDetailTab === 'Grades' && <GradesTab courseId={course.id} />}
         {activeDetailTab === 'Enrollment' && <EnrollmentTab course={course} />}
       </div>
     </div>

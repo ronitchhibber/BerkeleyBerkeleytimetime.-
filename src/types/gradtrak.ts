@@ -25,7 +25,7 @@ export interface RequirementGroup {
 export interface Program {
   id: string
   name: string
-  type: 'major' | 'minor' | 'college'
+  type: 'major' | 'minor' | 'college' | 'certificate' | 'university'
   groups: RequirementGroup[]
 }
 

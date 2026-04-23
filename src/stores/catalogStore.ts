@@ -20,6 +20,12 @@ interface CatalogState {
   // 0 = no filter; otherwise show only courses with RMP rating ≥ this number
   rmpMinRating: number
 
+  // Curriculum scope: pick a major/minor/cert, optionally narrow to one of its
+  // requirement groups (e.g. "Lower-Division Prerequisites"). Filters the
+  // catalog to courses that count toward the chosen program/group.
+  selectedProgramId: string | null
+  selectedRequirementGroupId: string | null
+
   selectedCourseId: string | null
   activeDetailTab: DetailTab
 
@@ -36,6 +42,8 @@ interface CatalogState {
   toggleDay: (day: string) => void
   setTimeRange: (from: string | null, to: string | null) => void
   setRmpMinRating: (rating: number) => void
+  setSelectedProgramId: (id: string | null) => void
+  setSelectedRequirementGroupId: (id: string | null) => void
   selectCourse: (id: string | null) => void
   setActiveDetailTab: (tab: DetailTab) => void
   resetFilters: () => void
@@ -59,6 +67,8 @@ const initialFilters = {
   selectedDays: new Set<string>(),
   timeRange: { from: null as string | null, to: null as string | null },
   rmpMinRating: 0,
+  selectedProgramId: null as string | null,
+  selectedRequirementGroupId: null as string | null,
 }
 
 function toggleInSet<T>(set: Set<T>, value: T): Set<T> {
@@ -96,6 +106,10 @@ export const useCatalogStore = create<CatalogState>((set) => ({
   toggleDay: (day) => set((s) => ({ selectedDays: toggleInSet(s.selectedDays, day) })),
   setTimeRange: (from, to) => set({ timeRange: { from, to } }),
   setRmpMinRating: (rating) => set({ rmpMinRating: rating }),
+  setSelectedProgramId: (id) =>
+    // Switching programs invalidates the previously-chosen group.
+    set({ selectedProgramId: id, selectedRequirementGroupId: null }),
+  setSelectedRequirementGroupId: (id) => set({ selectedRequirementGroupId: id }),
   selectCourse: (id) => set({ selectedCourseId: id, activeDetailTab: 'Overview' }),
   setActiveDetailTab: (tab) => set({ activeDetailTab: tab }),
   resetFilters: () => set({ ...initialFilters }),
@@ -147,6 +161,9 @@ export const useCatalogStore = create<CatalogState>((set) => ({
       }
       if (chipId === 'time') return { timeRange: { from: null, to: null } }
       if (chipId === 'rmp') return { rmpMinRating: 0 }
+      // Removing the program chip drops the group too — group is meaningless without a program.
+      if (chipId === 'program') return { selectedProgramId: null, selectedRequirementGroupId: null }
+      if (chipId === 'requirementGroup') return { selectedRequirementGroupId: null }
       return {}
     }),
 }))

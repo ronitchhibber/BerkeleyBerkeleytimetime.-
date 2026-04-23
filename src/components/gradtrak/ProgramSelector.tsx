@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useGradtrakStore } from '@/stores/gradtrakStore'
 
@@ -6,6 +6,8 @@ const TYPE_BADGE = {
   major: 'bg-cal-gold/15 text-cal-gold ring-1 ring-cal-gold/30',
   minor: 'bg-founders-rock/15 text-founders-rock ring-1 ring-founders-rock/30',
   college: 'bg-soybean/15 text-soybean ring-1 ring-soybean/30',
+  certificate: 'bg-lap-lane/15 text-lap-lane ring-1 ring-lap-lane/30',
+  university: 'bg-medalist/15 text-medalist ring-1 ring-medalist/30',
 } as const
 
 export default function ProgramSelector() {
@@ -15,16 +17,15 @@ export default function ProgramSelector() {
 
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const [filter, setFilter] = useState<'all' | 'major' | 'minor' | 'college'>('all')
-  const ref = useRef<HTMLDivElement>(null)
+  const [filter, setFilter] = useState<'all' | 'major' | 'minor' | 'college' | 'university' | 'certificate'>('all')
 
+  // Close on Escape only — X / Done are the explicit dismiss controls.
   useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
-  }, [])
+    if (!open) return
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('keydown', h)
+    return () => document.removeEventListener('keydown', h)
+  }, [open])
 
   const filtered = useMemo(() => {
     let result = programs
@@ -42,10 +43,12 @@ export default function ProgramSelector() {
     major: programs.filter((p) => p.type === 'major').length,
     minor: programs.filter((p) => p.type === 'minor').length,
     college: programs.filter((p) => p.type === 'college').length,
+    university: programs.filter((p) => p.type === 'university').length,
+    certificate: programs.filter((p) => p.type === 'certificate').length,
   }), [programs])
 
   return (
-    <div ref={ref}>
+    <div>
       <div className="mb-4 flex items-end justify-between">
         <div>
           <div className="mono text-[9.5px] font-semibold uppercase tracking-[0.22em] text-cal-gold/80">
@@ -113,10 +116,11 @@ export default function ProgramSelector() {
       {open && createPortal((
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md animate-fade-in"
-          onClick={() => setOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Add a program"
         >
           <div
-            onClick={(e) => e.stopPropagation()}
             className="animate-slide-down flex max-h-[82vh] w-[min(100%-1rem,580px)] flex-col overflow-hidden rounded-2xl border border-cal-gold/20 bg-bg-elevated shadow-2xl shadow-black/80"
           >
             {/* HEADER */}
@@ -131,7 +135,8 @@ export default function ProgramSelector() {
                     Add a <span className="serif-italic text-cal-gold">program</span>
                   </h3>
                   <p className="mt-1 text-[12px] text-text-muted">
-                    {programs.length} programs · {counts.major} majors · {counts.minor} minors · {counts.college} college
+                    {programs.length} programs · {counts.major} majors · {counts.minor} minors · {counts.college} colleges
+                    {counts.certificate > 0 && ` · ${counts.certificate} certs`}
                   </p>
                 </div>
                 <button
@@ -162,20 +167,22 @@ export default function ProgramSelector() {
                   className="w-full rounded-lg border border-border-input bg-bg-input py-2.5 pl-10 pr-3 text-[13px] text-text-primary placeholder-text-placeholder focus:border-cal-gold/50 focus:outline-none focus:ring-2 focus:ring-cal-gold/15"
                 />
               </div>
-              <div className="flex gap-1 rounded-lg border border-border-input bg-bg-input p-0.5">
-                {(['all', 'major', 'minor', 'college'] as const).map((f) => (
-                  <button
-                    key={f}
-                    onClick={() => setFilter(f)}
-                    className={`flex-1 rounded-md px-2.5 py-1.5 text-[11.5px] font-semibold capitalize transition-all ${
-                      filter === f
-                        ? 'bg-cal-gold text-bg-primary shadow-sm'
-                        : 'text-text-muted hover:text-text-primary'
-                    }`}
-                  >
-                    {f} <span className="mono ml-0.5 opacity-60">{counts[f]}</span>
-                  </button>
-                ))}
+              <div className="flex flex-wrap gap-1 rounded-lg border border-border-input bg-bg-input p-0.5">
+                {(['all', 'major', 'minor', 'college', 'university', 'certificate'] as const)
+                  .filter((f) => f === 'all' || counts[f] > 0)
+                  .map((f) => (
+                    <button
+                      key={f}
+                      onClick={() => setFilter(f)}
+                      className={`flex-1 min-w-[64px] rounded-md px-2 py-1.5 text-[11px] font-semibold capitalize transition-all ${
+                        filter === f
+                          ? 'bg-cal-gold text-bg-primary shadow-sm'
+                          : 'text-text-muted hover:text-text-primary'
+                      }`}
+                    >
+                      {f === 'university' ? 'Univ.' : f === 'certificate' ? 'Cert.' : f} <span className="mono ml-0.5 opacity-60">{counts[f]}</span>
+                    </button>
+                  ))}
               </div>
             </div>
 

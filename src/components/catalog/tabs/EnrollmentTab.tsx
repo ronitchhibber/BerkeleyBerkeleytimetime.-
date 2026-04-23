@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Course } from '@/types'
-import { useCourseDetail } from '@/stores/dataStore'
+import { useCourseDetail, useTermLabel } from '@/stores/dataStore'
 import EnrollmentChart from '@/components/catalog/charts/EnrollmentChart'
 
 interface EnrollmentTabProps {
@@ -25,6 +25,8 @@ function Stat({ label, value, valueClass }: { label: string; value: string | num
 export default function EnrollmentTab({ course }: EnrollmentTabProps) {
   const detail = useCourseDetail(course.id)
   const enrollmentHistory = detail?.enrollmentHistory ?? []
+  const isLoading = !detail
+  const termLabel = useTermLabel()
   const [showPhases, setShowPhases] = useState(true)
   const [showAsCount, setShowAsCount] = useState(false)
 
@@ -33,7 +35,7 @@ export default function EnrollmentTab({ course }: EnrollmentTabProps) {
       <div>
         <div className="mb-1 flex items-baseline justify-between">
           <h3 className="text-[16px] font-semibold text-text-primary">Current Enrollment</h3>
-          <span className="text-[12px] text-text-muted">Fall 2026 · Section {course.sectionNumber.replace('#', '')}</span>
+          <span className="text-[12px] text-text-muted">{termLabel} · Section {course.sectionNumber.replace('#', '')}</span>
         </div>
         <p className="text-[12.5px] text-text-secondary">
           Snapshot from berkeleytime.com · refreshed daily
@@ -63,7 +65,11 @@ export default function EnrollmentTab({ course }: EnrollmentTabProps) {
         </div>
       </div>
 
-      {enrollmentHistory.length > 0 ? (
+      {isLoading ? (
+        <div className="rounded-lg border border-border bg-bg-card px-5 py-8 text-center">
+          <p className="text-[12px] text-text-muted">Loading enrollment history…</p>
+        </div>
+      ) : enrollmentHistory.length > 0 ? (
         <div>
           <div className="mb-3 flex items-end justify-between">
             <div>

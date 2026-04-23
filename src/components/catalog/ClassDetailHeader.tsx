@@ -1,4 +1,5 @@
 import type { Course } from '@/types'
+import { useTermLabel } from '@/stores/dataStore'
 
 interface ClassDetailHeaderProps {
   course: Course
@@ -19,6 +20,7 @@ function enrollColor(p: number): string {
 }
 
 export default function ClassDetailHeader({ course }: ClassDetailHeaderProps) {
+  const termLabel = useTermLabel()
   return (
     <div className="relative overflow-hidden border-b border-border bg-gradient-to-br from-berkeley-blue/25 via-bg-primary to-bg-primary px-8 pb-6 pt-7">
       {/* Top hairline */}
@@ -31,7 +33,7 @@ export default function ClassDetailHeader({ course }: ClassDetailHeaderProps) {
           <div className="mb-2 flex items-center gap-2">
             <span className="eyebrow-plain">{course.department}</span>
             <span className="text-cal-gold/30">·</span>
-            <span className="mono text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">Fall 2026</span>
+            <span className="mono text-[10px] font-semibold uppercase tracking-[0.18em] text-text-muted">{termLabel}</span>
           </div>
           <div className="flex items-baseline gap-3">
             <h1 className="mono text-[32px] font-bold leading-none tracking-tight text-text-primary">

@@ -191,15 +191,15 @@ export default function GradtrakPage() {
 
             <div className="grid grid-cols-12 gap-10">
               <div className="col-span-12 lg:col-span-7">
-                <h1 className="serif text-[36px] md:text-[48px] lg:text-[60px] font-light leading-[0.98] tracking-tight text-text-primary">
+                <h1 className="serif text-[36px] md:text-[48px] lg:text-[60px] font-light leading-[1.08] tracking-tight text-text-primary">
                   Map your<br />
                   <span className="serif-italic font-normal">path to</span>{' '}
                   <span className="relative inline-block">
                     <span className="relative z-10 text-cal-gold">graduation</span>
-                    <span className="absolute -bottom-1 left-0 right-0 h-[3px] origin-left bg-cal-gold/30 animate-draw-line" style={{ animationDelay: '0.4s' }} />
+                    <span className="absolute -bottom-2 left-0 right-0 h-[3px] origin-left bg-cal-gold/30 animate-draw-line" style={{ animationDelay: '0.4s' }} />
                   </span>.
                 </h1>
-                <p className="mt-6 max-w-xl text-[14.5px] leading-relaxed text-text-secondary">
+                <p className="mt-8 max-w-xl text-[14.5px] leading-relaxed text-text-secondary">
                   A living degree audit. Add semesters, log your classes, and watch
                   requirements check themselves off across <span className="text-text-primary font-medium">{programs.length}</span> Berkeley programs.
                 </p>
@@ -521,6 +521,8 @@ function PlanSwitcher() {
   const [open, setOpen] = useState(false)
   const [renaming, setRenaming] = useState<string | null>(null)
   const [tempName, setTempName] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [newName, setNewName] = useState('')
   const [showDiff, setShowDiff] = useState(false)
   const [menuRect, setMenuRect] = useState<{ top: number; left: number; width: number } | null>(null)
   const active = plans.find((p) => p.id === activeId) || plans[0]
@@ -624,18 +626,39 @@ function PlanSwitcher() {
               </div>
             ))}
           </div>
-          <button
-            onClick={() => {
-              const name = prompt('Plan name?', `Plan ${plans.length + 1}`)
-              if (name?.trim()) { createPlan(name.trim()); setOpen(false) }
-            }}
-            className="flex w-full items-center justify-center gap-1.5 border-t border-border bg-bg-card/40 px-2.5 py-2 text-[11px] font-semibold text-cal-gold transition-colors hover:bg-cal-gold/10"
-          >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            New plan
-          </button>
+          {creating ? (
+            <div className="flex items-center gap-1 border-t border-border bg-bg-card/40 px-2 py-1.5">
+              <input
+                autoFocus
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newName.trim()) { createPlan(newName.trim()); setCreating(false); setNewName(''); setOpen(false) }
+                  if (e.key === 'Escape') { setCreating(false); setNewName('') }
+                }}
+                placeholder={`Plan ${plans.length + 1}`}
+                className="flex-1 rounded border border-cal-gold/40 bg-bg-input px-1.5 py-0.5 text-[11px] text-text-primary placeholder-text-muted focus:outline-none"
+              />
+              <button
+                onClick={() => { if (newName.trim()) { createPlan(newName.trim()); setCreating(false); setNewName(''); setOpen(false) } }}
+                className="mono rounded bg-cal-gold px-2 py-0.5 text-[10px] font-bold text-bg-primary"
+              >Create</button>
+              <button
+                onClick={() => { setCreating(false); setNewName('') }}
+                className="mono rounded px-1.5 py-0.5 text-[10px] text-text-muted hover:text-text-primary"
+              >Cancel</button>
+            </div>
+          ) : (
+            <button
+              onClick={() => { setCreating(true); setNewName(`Plan ${plans.length + 1}`) }}
+              className="flex w-full items-center justify-center gap-1.5 border-t border-border bg-bg-card/40 px-2.5 py-2 text-[11px] font-semibold text-cal-gold transition-colors hover:bg-cal-gold/10"
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              New plan
+            </button>
+          )}
           {plans.length > 1 && (
             <button
               onClick={() => { setShowDiff(true); setOpen(false) }}

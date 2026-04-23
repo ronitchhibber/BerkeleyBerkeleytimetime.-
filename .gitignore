@@ -34,3 +34,4 @@ data-pipeline/output/
 test-results/
 playwright-report/
 blob-report/
+public/data/courses.json

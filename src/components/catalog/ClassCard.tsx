@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import { memo, type CSSProperties } from 'react'
 import type { Course } from '@/types'
 import { useScheduleStore } from '@/stores/scheduleStore'
 import { useDataStore } from '@/stores/dataStore'
@@ -25,17 +25,24 @@ function enrollColor(p: number): string {
   return 'text-soybean'
 }
 
-export default function ClassCard({ course, isSelected, onClick, style }: ClassCardProps) {
+function ClassCardInner({ course, isSelected, onClick, style }: ClassCardProps) {
   const scheduledClasses = useScheduleStore((s) => s.classes)
   const allCourses = useDataStore((s) => s.courses)
+  const loadCourseDetail = useDataStore((s) => s.loadCourseDetail)
   const conflict = checkConflict(course, scheduledClasses, allCourses)
   const isInSchedule = scheduledClasses.some((c) => c.courseId === course.id)
+
+  // Pre-fetch detail on hover or focus — by the time the user clicks,
+  // the JSON is usually already cached in memory.
+  const prefetch = () => { void loadCourseDetail(course.id) }
 
   return (
     <div style={style} className="px-6 pb-3">
       <div
         onClick={onClick}
-        className={`group relative cursor-pointer overflow-hidden rounded-lg border bg-bg-card px-4 py-3.5 transition-all duration-150 ${
+        onMouseEnter={prefetch}
+        onFocus={prefetch}
+        className={`group relative cursor-pointer overflow-hidden rounded-lg border bg-bg-card px-4 py-3.5 transition-colors duration-75 ${
           isSelected
             ? 'border-cal-gold/50 bg-gradient-to-br from-berkeley-blue/40 via-bg-card to-bg-card shadow-[0_0_0_1px_rgba(253,181,21,0.2),0_8px_28px_-6px_rgba(0,50,98,0.5)]'
             : 'border-border hover:border-cal-gold/25 hover:bg-bg-card-hover'
@@ -44,7 +51,10 @@ export default function ClassCard({ course, isSelected, onClick, style }: ClassC
         {isSelected && (
           <>
             <div className="absolute left-0 top-0 bottom-0 w-[3px] campanile-rule" />
-            <div className="absolute right-0 top-0 h-12 w-12 bg-gradient-to-br from-cal-gold/8 to-transparent" />
+            <div
+              className="pointer-events-none absolute right-0 top-0 h-full w-1/2"
+              style={{ background: 'radial-gradient(circle at top right, rgba(253,181,21,0.16), transparent 65%)' }}
+            />
           </>
         )}
 
@@ -122,3 +132,12 @@ export default function ClassCard({ course, isSelected, onClick, style }: ClassC
     </div>
   )
 }
+
+const ClassCard = memo(ClassCardInner, (prev, next) =>
+  prev.course.id === next.course.id &&
+  prev.isSelected === next.isSelected &&
+  prev.style.top === next.style.top &&
+  prev.style.height === next.style.height &&
+  prev.onClick === next.onClick
+)
+export default ClassCard

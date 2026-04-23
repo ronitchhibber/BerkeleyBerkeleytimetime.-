@@ -8,4 +8,10 @@ binding = "SYNC_KV"
 id = "836099ccfcd8499ca76cb0481fe6d5c4"
 
 [vars]
-ALLOWED_ORIGIN = "*"
+# Comma-separated list of trusted browser origins. Worker echoes whichever
+# matches the request's Origin header. Keep in sync with where the frontend
+# is hosted (Pages preview URLs + production custom domain).
+ALLOWED_ORIGIN = "https://berkeleyberkeleytimetime.com,https://www.berkeleyberkeleytimetime.com,https://berkeleytime.pages.dev,http://localhost:5180"
+# Google OAuth client ID (public; safe to commit). Used to verify the
+# `aud` claim on incoming id_tokens — rejects tokens issued for other apps.
+GOOGLE_CLIENT_ID = "504561987858-hgdk20iv7am2173vipo653mf41vs2kkv.apps.googleusercontent.com"

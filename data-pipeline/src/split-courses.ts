@@ -13,9 +13,21 @@ import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '..', '..', 'public', 'data')
-const SRC = join(ROOT, 'courses.json')
-const SUMMARY = join(ROOT, 'courses-summary.json')
-const DETAIL_DIR = join(ROOT, 'courses-detail')
+
+// Allow per-term split:
+//   tsx src/split-courses.ts                              → fall (defaults)
+//   tsx src/split-courses.ts --term summer-2026           → summer
+const args = process.argv.slice(2)
+const ti = args.indexOf('--term')
+const term = ti !== -1 ? args[ti + 1] : null
+
+// Source can be the pipeline's per-term output (output/courses-summer-2026.json)
+// or the fall default in public/data/courses.json.
+const PIPELINE_OUT = join(__dirname, '..', 'output', term ? `courses-${term}.json` : 'courses.json')
+const PUBLIC_OUT = join(ROOT, 'courses.json')
+const SRC = (term && existsSync(PIPELINE_OUT)) ? PIPELINE_OUT : PUBLIC_OUT
+const SUMMARY = join(ROOT, term ? `courses-summary-${term}.json` : 'courses-summary.json')
+const DETAIL_DIR = join(ROOT, term ? `courses-detail-${term}` : 'courses-detail')
 
 interface Course {
   id: string

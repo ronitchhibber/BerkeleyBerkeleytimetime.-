@@ -13,7 +13,7 @@ const CATALOG_QUERY = `
     catalogSearch(year: $year, semester: $semester, page: $page, pageSize: $pageSize) {
       totalCount
       results {
-        year semester subject courseNumber number courseId
+        year semester subject courseNumber number courseId sessionId
         courseTitle courseDescription
         gradingBasis finalExam unitsMin unitsMax
         academicCareer academicOrganization academicOrganizationName
@@ -51,6 +51,7 @@ const GRADE_QUERY = `
 
 interface CatalogEntry {
   subject: string; courseNumber: string; number: string; courseId: string
+  sessionId: string
   courseTitle: string; courseDescription: string
   gradingBasis: string; finalExam: string; unitsMin: number; unitsMax: number
   academicCareer: string; academicOrganization: string; academicOrganizationName: string
@@ -223,12 +224,15 @@ async function fetchCatalog(year: number, semester: string): Promise<CatalogEntr
   return all
 }
 
-async function fetchClassDetails(year: number, semester: string, sessionId: string, entries: CatalogEntry[]): Promise<Map<string, ClassDetail>> {
+async function fetchClassDetails(year: number, semester: string, _defaultSessionId: string, entries: CatalogEntry[]): Promise<Map<string, ClassDetail>> {
   const map = new Map<string, ClassDetail>()
   let done = 0
   let errors = 0
   for (const e of entries) {
     try {
+      // Use the per-class sessionId from catalogSearch (Summer has many: 6W1, 8W, etc.).
+      // Fall back to the global default if missing.
+      const sessionId = e.sessionId || _defaultSessionId
       const data = await gqlQuery<{ class: ClassDetail | null }>(CLASS_QUERY, {
         year, semester, sessionId, subject: e.subject, courseNumber: e.courseNumber, number: e.number,
       })
@@ -268,9 +272,12 @@ async function main() {
   const noDetails = args.includes('--no-details')
   const limitArg = args.indexOf('--limit')
   const limit = limitArg !== -1 ? parseInt(args[limitArg + 1]) : 0
+  const semArg = args.indexOf('--semester')
+  const yearArg = args.indexOf('--year')
+  const outArg = args.indexOf('--out')
 
-  const year = DEFAULT_YEAR
-  const semester = DEFAULT_SEMESTER
+  const year = yearArg !== -1 ? parseInt(args[yearArg + 1]) : DEFAULT_YEAR
+  const semester = semArg !== -1 ? args[semArg + 1] : DEFAULT_SEMESTER
   const sessionId = '1'
 
   console.log(`\nBerkeleytime Data Pipeline v2`)
@@ -312,10 +319,11 @@ async function main() {
     courses,
   }
 
-  const outputPath = join(__dirname, '..', 'output', 'courses.json')
+  const fileTag = `${semester.toLowerCase()}-${year}`
+  const outFilename = outArg !== -1 ? args[outArg + 1] : `courses-${fileTag}.json`
+  const outputPath = join(__dirname, '..', 'output', outFilename)
   writeFileSync(outputPath, JSON.stringify(output, null, 2))
-  console.log(`\nWrote ${courses.length} courses to output/courses.json`)
-  console.log(`Copy to frontend: cp output/courses.json ../public/data/courses.json`)
+  console.log(`\nWrote ${courses.length} courses to output/${outFilename}`)
 }
 
 main().catch((e) => { console.error('Pipeline failed:', e); process.exit(1) })

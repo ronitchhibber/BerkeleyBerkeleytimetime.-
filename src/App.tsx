@@ -5,14 +5,14 @@ import ErrorBoundary from '@/components/ErrorBoundary'
 import { useGradtrakStore } from '@/stores/gradtrakStore'
 import { useScheduleStore } from '@/stores/scheduleStore'
 import { useAutoSync } from '@/services/sync'
-// themeStore self-initializes on import (sets html.light + listens to system pref)
-import '@/stores/themeStore'
 
 const CatalogPage = lazy(() => import('@/pages/CatalogPage'))
 const SchedulerPage = lazy(() => import('@/pages/SchedulerPage'))
 const GradtrakPage = lazy(() => import('@/pages/GradtrakPage'))
 const GradesPage = lazy(() => import('@/pages/GradesPage'))
 const EnrollmentPage = lazy(() => import('@/pages/EnrollmentPage'))
+const PrivacyPage = lazy(() => import('@/pages/PrivacyPage'))
+const TermsPage = lazy(() => import('@/pages/TermsPage'))
 
 function RouteLoading() {
   return (
@@ -69,6 +69,14 @@ export default function App() {
               <Route
                 path="/enrollment/:courseId?"
                 element={<ErrorBoundary name="Enrollment"><EnrollmentPage /></ErrorBoundary>}
+              />
+              <Route
+                path="/privacy"
+                element={<ErrorBoundary name="Privacy"><PrivacyPage /></ErrorBoundary>}
+              />
+              <Route
+                path="/terms"
+                element={<ErrorBoundary name="Terms"><TermsPage /></ErrorBoundary>}
               />
             </Route>
           </Routes>

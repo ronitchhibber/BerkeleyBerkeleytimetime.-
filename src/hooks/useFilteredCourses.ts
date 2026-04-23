@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useDataStore } from '@/stores/dataStore'
 import { useCatalogStore } from '@/stores/catalogStore'
+import { useGradtrakStore } from '@/stores/gradtrakStore'
 import { useDebounce } from './useDebounce'
 import {
   matchesSearch,
@@ -14,6 +15,7 @@ import {
   matchesTimeRange,
   matchesRmpRating,
 } from '@/utils/filterUtils'
+import { buildProgramScope, matchesProgramScope } from '@/utils/programFilterUtils'
 import { sortCourses } from '@/utils/sortUtils'
 import type { Course } from '@/types'
 
@@ -31,8 +33,20 @@ export function useFilteredCourses(): Course[] {
   const selectedDays = useCatalogStore((s) => s.selectedDays)
   const timeRange = useCatalogStore((s) => s.timeRange)
   const rmpMinRating = useCatalogStore((s) => s.rmpMinRating)
+  const selectedProgramId = useCatalogStore((s) => s.selectedProgramId)
+  const selectedRequirementGroupId = useCatalogStore((s) => s.selectedRequirementGroupId)
+  const programs = useGradtrakStore((s) => s.programs)
 
   const debouncedSearch = useDebounce(searchQuery, 300)
+
+  // Build the program scope once per program/group change. Doing it inside the
+  // filter loop would re-walk the program tree for every course (O(courses × reqs)).
+  const programScope = useMemo(() => {
+    if (!selectedProgramId) return null
+    const program = programs.find((p) => p.id === selectedProgramId)
+    if (!program) return null
+    return buildProgramScope(program, selectedRequirementGroupId)
+  }, [programs, selectedProgramId, selectedRequirementGroupId])
 
   return useMemo(() => {
     const result = courses.filter((c) => {
@@ -47,6 +61,7 @@ export function useFilteredCourses(): Course[] {
       if (!matchesDays(c, selectedDays)) return false
       if (!matchesTimeRange(c, timeRange.from, timeRange.to)) return false
       if (!matchesRmpRating(c, rmpMinRating)) return false
+      if (!matchesProgramScope(c.code, programScope)) return false
       return true
     })
 
@@ -65,5 +80,6 @@ export function useFilteredCourses(): Course[] {
     selectedDays,
     timeRange,
     rmpMinRating,
+    programScope,
   ])
 }

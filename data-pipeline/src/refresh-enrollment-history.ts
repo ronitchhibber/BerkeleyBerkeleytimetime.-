@@ -33,12 +33,14 @@ interface HistoryPoint {
 }
 
 async function main() {
-  const inputPath = join(__dirname, '..', 'output', 'courses.json')
+  const args = process.argv.slice(2)
+  const yi = args.indexOf('--year'); const si = args.indexOf('--semester'); const fi = args.indexOf('--file')
+  const year = yi !== -1 ? parseInt(args[yi + 1]) : DEFAULT_YEAR
+  const semester = si !== -1 ? args[si + 1] : DEFAULT_SEMESTER
+  const fileTag = `${semester.toLowerCase()}-${year}`
+  const inputName = fi !== -1 ? args[fi + 1] : `courses-${fileTag}.json`
+  const inputPath = join(__dirname, '..', 'output', inputName)
   const data = JSON.parse(readFileSync(inputPath, 'utf-8'))
-
-  const year = DEFAULT_YEAR
-  const semester = DEFAULT_SEMESTER
-  const sessionId = '1'
 
   console.log(`\nFetching real enrollment history for ${data.courses.length} courses...`)
   let updated = 0
