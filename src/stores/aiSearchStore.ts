@@ -16,12 +16,17 @@
 import { create } from 'zustand'
 
 export interface AskFilters {
+  // Hard filters — populated by the AI ONLY when the student explicitly named
+  // them. These get applied to the catalogStore as visible chips.
   subjects: string[]
   breadths: string[]
   rmpMin: number | null
   level: 'lower' | 'upper' | 'graduate' | null
   unitsMin: number | null
   unitsMax: number | null
+  // Soft semantic search terms used to assemble the candidate pool the
+  // ranker scores. Never shown as chips.
+  keywords: string[]
   topicQuery: string
 }
 

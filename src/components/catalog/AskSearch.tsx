@@ -24,23 +24,25 @@ const SUGGESTIONS = [
   'data science elective with Joseph Gonzalez',
 ]
 
+/**
+ * Apply ONLY the hard filters the AI flagged as explicitly stated by the
+ * student. The AI prompt is now strict: subjects/breadths/rmp/level/units only
+ * appear when the student literally named them. Keywords stay invisible — they
+ * exist solely to widen the candidate pool the ranker sees, not to clutter
+ * the catalog with surprise chips ("why is RMP > 4 selected when I never
+ * asked for that?").
+ */
 function applyFiltersToStore(filters: AskFilters) {
   const cs = useCatalogStore.getState()
-  // Reset existing AI-managed filters first to keep state clean.
   cs.resetFilters()
-  // Subjects → majors filter (catalogStore stores subject codes in `majors`).
   for (const s of filters.subjects) cs.toggleMajor(s)
-  // Breadths → lsBreadth or universityReqs depending on type.
   for (const b of filters.breadths) {
     if (b === 'American Cultures') cs.toggleRequirement('universityReqs', 'American Cultures')
     else if (b.startsWith('Reading and Composition')) cs.toggleRequirement('universityReqs', b)
     else cs.toggleRequirement('lsBreadth', b)
   }
-  // RMP threshold.
   if (filters.rmpMin !== null) cs.setRmpMinRating(Math.max(0, Math.min(5, filters.rmpMin)))
-  // Level.
   if (filters.level) cs.toggleClassLevel(filters.level)
-  // Units range.
   if (filters.unitsMin !== null || filters.unitsMax !== null) {
     cs.setUnitsRange([filters.unitsMin ?? 0, filters.unitsMax ?? 5])
   }
@@ -81,51 +83,89 @@ export default function AskSearch() {
     setFilters(filters)
     applyFiltersToStore(filters)
 
-    // STAGE 2 — rank
+    // STAGE 2 — semantic candidate selection + rank.
+    //
+    // Goal: hand the ranker a wide, topically-relevant pool that it can
+    // *recommend* from. The old pipeline collapsed the catalog to a single
+    // subject ("philosophy" → PHILOS), which missed cross-department offerings
+    // (BUDDSTD, EALANG, RELIGST). The new approach keeps the pool wide:
+    //
+    //   1. Apply hard filters the student explicitly named (rmpMin, level,
+    //      units, breadths, subjects-when-named). Skip soft filters.
+    //   2. Score every remaining course by how many AI-generated keywords
+    //      appear in its title or description.
+    //   3. Take the top ~80 by keyword score (plus any ties) — we want a
+    //      generous pool because the ranker will prune to a tight final 8.
     if (!filters.topicQuery) return
     setRanking(true)
-    // Read the freshly-filtered list from the data store. This runs after
-    // filter state has propagated through React; a microtask defer is enough.
     await new Promise((r) => requestAnimationFrame(() => r(null)))
     const allCourses = useDataStore.getState().courses
-    // Re-apply the same filter logic offline (mirrors useFilteredCourses subset).
-    const subjectsLower = new Set(filters.subjects.map((s) => s.toUpperCase().trim()))
+
+    const subjectsUpper = new Set(filters.subjects.map((s) => s.toUpperCase().trim()))
     const breadthsLower = new Set(filters.breadths.map((b) => b.toLowerCase()))
-    const candidates = allCourses
-      .filter((c) => {
-        if (subjectsLower.size > 0) {
-          const subj = (c.code || '').split(' ')[0].toUpperCase()
-          if (!subjectsLower.has(subj)) return false
+    const keywords = filters.keywords.map((k) => k.toLowerCase().trim()).filter(Boolean)
+
+    // Pass 1: apply hard constraints only.
+    const hardFiltered = allCourses.filter((c) => {
+      if (subjectsUpper.size > 0) {
+        const subj = (c.code || '').split(' ')[0].toUpperCase()
+        if (!subjectsUpper.has(subj)) return false
+      }
+      if (breadthsLower.size > 0) {
+        const courseBreadths = (c.requirements?.lsBreadth ?? []).map((b) => b.toLowerCase())
+        const ac = (c.requirements?.universityReqs ?? []).map((r) => r.toLowerCase())
+        if (
+          !courseBreadths.some((b) => breadthsLower.has(b)) &&
+          !ac.some((r) => breadthsLower.has(r))
+        ) return false
+      }
+      if (filters.rmpMin !== null && (c.rmpRating?.avgRating ?? 0) < filters.rmpMin) return false
+      if (filters.level && c.level !== filters.level) return false
+      return true
+    })
+
+    // Pass 2: score by keyword match strength against title + description.
+    // Title hits weight 3× description hits — a course with the term in its
+    // name is almost always more relevant than one that mentions it in passing.
+    type Scored = { course: (typeof allCourses)[number]; score: number }
+    let pool: Scored[]
+    if (keywords.length === 0) {
+      // No keywords (rare — only when the AI returned nothing topical).
+      // Fall back to the hard-filtered set, capped.
+      pool = hardFiltered.slice(0, 80).map((c) => ({ course: c, score: 0 }))
+    } else {
+      const scored: Scored[] = []
+      for (const c of hardFiltered) {
+        const title = (c.title || '').toLowerCase()
+        const desc = (c.description || '').toLowerCase()
+        let s = 0
+        for (const k of keywords) {
+          if (!k) continue
+          if (title.includes(k)) s += 3
+          if (desc.includes(k)) s += 1
         }
-        if (breadthsLower.size > 0) {
-          const courseBreadths = (c.requirements?.lsBreadth ?? []).map((b) => b.toLowerCase())
-          // Allow if course matches ANY of the requested breadths.
-          if (!courseBreadths.some((b) => breadthsLower.has(b))) {
-            // Check American Cultures via the requirements lookup.
-            const ac = (c.requirements?.universityReqs ?? []).map((r) => r.toLowerCase())
-            if (!ac.some((r) => breadthsLower.has(r))) return false
-          }
-        }
-        if (filters.rmpMin !== null && (c.rmpRating?.avgRating ?? 0) < filters.rmpMin) return false
-        if (filters.level && c.level !== filters.level) return false
-        return true
-      })
-      .slice(0, 50)
-      .map((c) => ({
-        id: c.id,
-        code: c.code,
-        title: c.title,
-        description: (c.description ?? '').slice(0, 400),
-      }))
+        if (s > 0) scored.push({ course: c, score: s })
+      }
+      scored.sort((a, b) => b.score - a.score)
+      pool = scored.slice(0, 80)
+    }
+
+    const candidates = pool.map(({ course }) => ({
+      id: course.id,
+      code: course.code,
+      title: course.title,
+      description: (course.description ?? '').slice(0, 500),
+    }))
 
     if (candidates.length === 0) {
       setRanking(false)
-      setError('No matches — try fewer constraints')
+      setError('No courses matched those terms')
       return
     }
     try {
       const hits = await fetchRank(filters.topicQuery, candidates)
       setRanked(hits)
+      if (hits.length === 0) setError('No strong matches in the catalog')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ranking failed')
     } finally {

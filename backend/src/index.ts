@@ -21,12 +21,21 @@ export interface Env {
 }
 
 interface AskFilters {
+  // Hard filters — ONLY set when the student explicitly mentioned them in the
+  // query. Anything else is left empty/null. The frontend treats these as
+  // user-confirmed scoping (chips) and applies them to the catalog store.
   subjects: string[]
   breadths: string[]
   rmpMin: number | null
   level: 'lower' | 'upper' | 'graduate' | null
   unitsMin: number | null
   unitsMax: number | null
+  // Soft semantic hints for finding candidate courses across the catalog.
+  // These are NEVER shown as filter chips — they exist purely to widen the
+  // pool that the ranker scores. 6-12 short phrases works well.
+  keywords: string[]
+  // 1-sentence restatement of what the student wants — used as the topical
+  // anchor for ranking and shown back to the student in the AI banner.
   topicQuery: string
 }
 
@@ -75,27 +84,65 @@ function extractJson<T>(raw: string): T {
   return JSON.parse(trimmed) as T
 }
 
-const EXTRACT_SYSTEM = `You are a Berkeleytime course-search assistant. The user describes a Berkeley class they want. Extract structured filters as JSON.
+const EXTRACT_SYSTEM = `You are a Berkeley course-search assistant. A student describes a class they want in natural language. Convert their request into a JSON search plan.
 
-Return ONLY a single JSON object with these exact fields (no markdown, no commentary):
+CORE PRINCIPLE — the student wants a recommendation, not a filter form. Be a librarian who reads descriptions, not a clerk who checks boxes. The keywords field does the real work; hard filters only capture what the student literally named.
+
+== HARD FILTERS — be EXTREMELY conservative ==
+Set a hard filter ONLY if the student explicitly named it in their words. If the student just describes a topic ("philosophy that expands my horizons"), leave hard filters empty.
+
+  subjects: []         ← Only when student names a subject CODE or formal department
+                          (e.g. "CS classes", "in the philosophy department", "ECON elective").
+                          DO NOT infer subjects from topical descriptions like
+                          "philosophy class about Eastern thought" — leave empty so
+                          the keyword search spans every relevant department
+                          (BUDDSTD, EALANG, RELIGST, SASIAN, etc., not just PHILOS).
+  breadths: []         ← Only when student names a breadth (e.g. "AC", "Arts & Lit
+                          breadth", "satisfies historical studies").
+  rmpMin: null         ← Only when student names a number ("RMP > 4", "rated 4+").
+  level: null          ← Only when student says "lower div" / "upper div" / "graduate".
+  unitsMin/Max: null   ← Only when student names a number of units.
+
+== KEYWORDS — this is where the magic happens ==
+Generate 6-12 short search phrases that would appear in the title or description of
+courses the student would love. Include synonyms, sub-topics, named figures, related
+movements, and adjacent ideas — anything that would help a librarian find
+genuinely-relevant offerings across departments.
+
+Examples:
+  "philosophy class about Eastern thought, expand my horizons" →
+    keywords: ["buddhism", "taoism", "confucian", "zen", "asian philosophy",
+               "indian philosophy", "hinduism", "vedic", "eastern thought",
+               "comparative religion", "non-western"]
+
+  "easy upper-div breadth, no Friday classes" →
+    keywords: ["introduction", "survey", "topics in", "perspectives on"]
+    level: "upper"  (explicit)
+
+  "data science elective with Joseph Gonzalez" →
+    keywords: ["machine learning", "data systems", "joseph gonzalez", "ray",
+               "distributed computing"]
+
+  "AC requirement that's actually interesting" →
+    breadths: ["American Cultures"]  (explicit)
+    keywords: ["race", "ethnicity", "diaspora", "indigenous", "asian american",
+               "chicano", "black studies", "immigration"]
+
+== TOPIC QUERY ==
+Restate the student's intent in one clean sentence — this anchors the ranker.
+
+== OUTPUT ==
+Return ONLY this JSON (no markdown, no commentary):
 {
-  "subjects": string[],   // Berkeley department codes, e.g. ["PHILOS", "BUDDSTD", "RELIGST"]. Map natural-language disciplines to codes. Empty array if none.
-  "breadths": string[],   // Subset of: "Arts & Literature", "Biological Science", "Historical Studies", "International Studies", "Philosophy & Values", "Physical Science", "Social & Behavioral Sciences", "American Cultures", "Reading and Composition A", "Reading and Composition B"
-  "rmpMin": number|null,  // RateMyProfessor minimum (1-5), null if unspecified
-  "level": "lower"|"upper"|"graduate"|null,
-  "unitsMin": number|null,
-  "unitsMax": number|null,
-  "topicQuery": string    // Short phrase describing what the class should be ABOUT, used for ranking against descriptions. Strip filter language.
-}
-
-Subject mapping cheatsheet (partial):
-  philosophy → PHILOS; eastern philosophy/buddhism → PHILOS, BUDDSTD, EALANG, RELIGST
-  politics → POL SCI; CS/coding → COMPSCI; data/statistics → DATA, STAT
-  poli sci → POL SCI; econ → ECON; psych → PSYCH; bio → BIOLOGY, MCELLBI, INTEGBI
-  film → FILM; music → MUSIC; art history → HISTART; gender → GWS
-  middle east → MELC; east asian → CHINESE, JAPAN, KOREAN, EALANG
-  english → ENGLISH; rhetoric → RHETOR; history → HISTORY
-  business → UGBA; engineering → varies (ME, EECS, CIVENG, BIOENG, etc.)`
+  "subjects": [],
+  "breadths": [],
+  "rmpMin": null,
+  "level": null,
+  "unitsMin": null,
+  "unitsMax": null,
+  "keywords": [...],
+  "topicQuery": "..."
+}`
 
 const RANK_SYSTEM = `You are a Berkeleytime course-search assistant. Given a topical query and a list of candidate Berkeley courses, return ONLY courses that are GENUINELY about the topic.
 
@@ -116,9 +163,8 @@ Return ONLY a JSON object (no markdown, no commentary):
 Sort by score descending. Maximum 8 results. Empty array is a valid and often correct answer.`
 
 async function aiSearch(env: Env, query: string): Promise<AskFilters> {
-  const text = await callAnthropic(env, EXTRACT_SYSTEM, query, 400)
+  const text = await callAnthropic(env, EXTRACT_SYSTEM, query, 600)
   const parsed = extractJson<Partial<AskFilters>>(text)
-  // Normalize + defaults
   return {
     subjects: Array.isArray(parsed.subjects) ? parsed.subjects.map(String) : [],
     breadths: Array.isArray(parsed.breadths) ? parsed.breadths.map(String) : [],
@@ -126,16 +172,19 @@ async function aiSearch(env: Env, query: string): Promise<AskFilters> {
     level: parsed.level === 'lower' || parsed.level === 'upper' || parsed.level === 'graduate' ? parsed.level : null,
     unitsMin: typeof parsed.unitsMin === 'number' ? parsed.unitsMin : null,
     unitsMax: typeof parsed.unitsMax === 'number' ? parsed.unitsMax : null,
+    keywords: Array.isArray(parsed.keywords) ? parsed.keywords.map(String).slice(0, 16) : [],
     topicQuery: typeof parsed.topicQuery === 'string' ? parsed.topicQuery : query,
   }
 }
 
 async function aiRank(env: Env, topic: string, candidates: RankCandidate[]): Promise<{ id: string; score: number; why: string }[]> {
   if (candidates.length === 0) return []
-  // Cap to 50 to keep prompt size sane.
-  const capped = candidates.slice(0, 50)
+  // 80 candidates × ~120 tokens of description ≈ a 10-12K token prompt — well
+  // within Haiku's window and big enough that semantic search across the
+  // catalog has real headroom.
+  const capped = candidates.slice(0, 80)
   const userMsg = `Topic: ${topic}\n\nCandidates:\n${JSON.stringify(capped, null, 0)}`
-  const text = await callAnthropic(env, RANK_SYSTEM, userMsg, 1500)
+  const text = await callAnthropic(env, RANK_SYSTEM, userMsg, 1800)
   const parsed = extractJson<{ ranked: { id: string; score: number; why: string }[] }>(text)
   return Array.isArray(parsed.ranked) ? parsed.ranked.slice(0, 8) : []
 }
