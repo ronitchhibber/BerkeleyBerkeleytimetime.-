@@ -3,7 +3,9 @@ import { createPortal } from 'react-dom'
 import { useGradtrakStore } from '@/stores/gradtrakStore'
 import { useDataStore } from '@/stores/dataStore'
 import { useAllCoursesStore } from '@/stores/allCoursesStore'
-import { evaluateProgram, requirementsCourseCouldSatisfy } from '@/utils/requirementMatcher'
+import { useCourseIndex } from '@/hooks/useCourseIndex'
+import { useGradtrakProgress } from '@/hooks/useGradtrakProgress'
+import { requirementsCourseCouldSatisfy } from '@/utils/requirementMatcher'
 import { buildShareUrl, decodePlan, exportCsv, downloadCsv } from '@/utils/planExport'
 import { parseCalCentralPaste } from '@/utils/calcentralImport'
 import { lookupCourse, totalUnits as sumUnits } from '@/utils/courseLookup'
@@ -17,15 +19,15 @@ const GraduationPlanner = lazy(() => import('@/components/gradtrak/GraduationPla
 export default function GradtrakPage() {
   const loadData = useDataStore((s) => s.loadData)
   const isLoading = useDataStore((s) => s.isLoading)
-  const allCourses = useDataStore((s) => s.courses)
-  const catalogCourses = useAllCoursesStore((s) => s.courses)
   const loadPrograms = useGradtrakStore((s) => s.loadPrograms)
   const loadAllCourses = useAllCoursesStore((s) => s.loadCourses)
   const semesters = useGradtrakStore((s) => s.semesters)
   const programs = useGradtrakStore((s) => s.programs)
-  const selectedProgramIds = useGradtrakStore((s) => s.selectedProgramIds)
-  const overrides = useGradtrakStore((s) => s.manualOverrides)
   const clearAll = useGradtrakStore((s) => s.clearAll)
+  const index = useCourseIndex()
+  // Shared evaluation — both header stats AND ProgramProgressView read from
+  // this hook, so evaluateProgram() runs once per state change instead of twice.
+  const progress = useGradtrakProgress()
 
   useEffect(() => {
     loadData()
@@ -53,32 +55,16 @@ export default function GradtrakPage() {
     }
   }, [loadData, loadPrograms, loadAllCourses])
 
-  const stats = useMemo(() => {
-    const takenCodes = semesters.flatMap((s) => s.courseCodes)
-    const totalUnits = sumUnits(takenCodes, allCourses, catalogCourses)
-    const selected = programs.filter((p) => selectedProgramIds.includes(p.id))
-    let totalReqs = 0
-    let satReqs = 0
-    selected.forEach((p) => {
-      const raw = evaluateProgram(p, takenCodes, allCourses, catalogCourses)
-      raw.groups.forEach((g) => {
-        g.requirements.forEach((r) => {
-          totalReqs++
-          const overrideKey = `${p.id}:${r.requirementId}`
-          if (r.satisfied || overrides[overrideKey]) satReqs++
-        })
-      })
-    })
-    const overallPct = totalReqs > 0 ? Math.round((satReqs / totalReqs) * 100) : 0
-    return {
-      classes: takenCodes.length,
-      units: totalUnits,
-      programs: selected.length,
-      satReqs,
-      totalReqs,
-      overallPct,
-    }
-  }, [semesters, allCourses, catalogCourses, programs, selectedProgramIds, overrides])
+  // Header stats reuse the shared progress evaluation. The only thing the
+  // header adds is a units sum.
+  const stats = useMemo(() => ({
+    classes: progress.takenCodes.length,
+    units: sumUnits(progress.takenCodes, index),
+    programs: progress.selectedPrograms.length,
+    satReqs: progress.totals.satReqs,
+    totalReqs: progress.totals.totalReqs,
+    overallPct: progress.totals.pct,
+  }), [progress, index])
 
   if (isLoading) {
     return (
@@ -692,8 +678,7 @@ function ExportMenu() {
   const selectedIds = useGradtrakStore((s) => s.selectedProgramIds)
   const programs = useGradtrakStore((s) => s.programs)
   const overrides = useGradtrakStore((s) => s.manualOverrides)
-  const allCourses = useDataStore((s) => s.courses)
-  const catalogCourses = useAllCoursesStore((s) => s.courses)
+  const index = useCourseIndex()
 
   const handleShare = async () => {
     const url = buildShareUrl({
@@ -712,7 +697,7 @@ function ExportMenu() {
 
   const handleCsv = () => {
     const selectedPrograms = programs.filter((p) => selectedIds.includes(p.id))
-    const csv = exportCsv({ semesters, selectedPrograms, allCourses, catalogCourses })
+    const csv = exportCsv({ semesters, selectedPrograms, index })
     const date = new Date().toISOString().slice(0, 10)
     downloadCsv(`gradtrak-${date}.csv`, csv)
   }
@@ -764,22 +749,18 @@ function UnmatchedCoursesPanel() {
   const semesters = useGradtrakStore((s) => s.semesters)
   const programs = useGradtrakStore((s) => s.programs)
   const selectedProgramIds = useGradtrakStore((s) => s.selectedProgramIds)
-  const allCourses = useDataStore((s) => s.courses)
-  const catalogCourses = useAllCoursesStore((s) => s.courses)
+  const index = useCourseIndex()
 
   const unmatched = useMemo(() => {
     const selected = programs.filter((p) => selectedProgramIds.includes(p.id))
     if (selected.length === 0) return []
     const taken = semesters.flatMap((s) => s.courseCodes)
-    return taken.filter((code) => {
-      const reqs = requirementsCourseCouldSatisfy(code, selected, allCourses, catalogCourses)
-      return reqs.length === 0
-    })
-  }, [semesters, programs, selectedProgramIds, allCourses, catalogCourses])
+    return taken.filter((code) => requirementsCourseCouldSatisfy(code, selected, index).length === 0)
+  }, [semesters, programs, selectedProgramIds, index])
 
   if (unmatched.length === 0) return null
 
-  const lookup = (code: string) => lookupCourse(code, allCourses, catalogCourses)
+  const lookup = (code: string) => lookupCourse(code, index)
 
   return (
     <div className="mt-6 rounded-xl border border-wellman/25 bg-wellman/[0.04] p-4">

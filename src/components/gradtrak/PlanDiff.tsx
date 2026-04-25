@@ -8,8 +8,7 @@
 import { useState, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useGradtrakStore } from '@/stores/gradtrakStore'
-import { useDataStore } from '@/stores/dataStore'
-import { useAllCoursesStore } from '@/stores/allCoursesStore'
+import { useCourseIndex } from '@/hooks/useCourseIndex'
 import { evaluateProgram } from '@/utils/requirementMatcher'
 import { totalUnits as sumUnits } from '@/utils/courseLookup'
 import type { Plan } from '@/stores/gradtrakStore'
@@ -17,8 +16,7 @@ import type { Plan } from '@/stores/gradtrakStore'
 export default function PlanDiff({ onClose }: { onClose: () => void }) {
   const plans = useGradtrakStore((s) => s.plans)
   const programs = useGradtrakStore((s) => s.programs)
-  const allCourses = useDataStore((s) => s.courses)
-  const catalogCourses = useAllCoursesStore((s) => s.courses)
+  const index = useCourseIndex()
 
   const [leftId, setLeftId] = useState(plans[0]?.id || '')
   const [rightId, setRightId] = useState(plans[1]?.id || plans[0]?.id || '')
@@ -26,8 +24,8 @@ export default function PlanDiff({ onClose }: { onClose: () => void }) {
   const left = plans.find((p) => p.id === leftId) || plans[0]
   const right = plans.find((p) => p.id === rightId) || plans[0]
 
-  const leftStats = usePlanStats(left, programs, allCourses, catalogCourses)
-  const rightStats = usePlanStats(right, programs, allCourses, catalogCourses)
+  const leftStats = usePlanStats(left, programs, index)
+  const rightStats = usePlanStats(right, programs, index)
 
   const courseDiff = useMemo(() => {
     const lc = new Set(left.semesters.flatMap((s) => s.courseCodes))
@@ -133,20 +131,19 @@ export default function PlanDiff({ onClose }: { onClose: () => void }) {
 function usePlanStats(
   plan: Plan,
   programs: import('@/types/gradtrak').Program[],
-  allCourses: import('@/types').Course[],
-  catalogCourses: import('@/stores/allCoursesStore').AllCourse[]
+  index: import('@/utils/courseIndex').CourseIndex,
 ) {
   return useMemo(() => {
     const taken = plan.semesters.flatMap((s) => s.courseCodes)
     const classCount = taken.length
-    const unitsTotal = sumUnits(taken, allCourses, catalogCourses)
+    const unitsTotal = sumUnits(taken, index)
 
     const selectedPrograms = programs.filter((p) => plan.selectedProgramIds.includes(p.id))
     let totalReqs = 0
     let satReqs = 0
     const programSummaries: { id: string; name: string; type: string; sat: number; total: number }[] = []
     for (const p of selectedPrograms) {
-      const progress = evaluateProgram(p, taken, allCourses, catalogCourses)
+      const progress = evaluateProgram(p, taken, index)
       let pSat = 0
       let pTotal = 0
       for (const g of progress.groups) {
@@ -173,7 +170,7 @@ function usePlanStats(
       pct: totalReqs > 0 ? Math.round((satReqs / totalReqs) * 100) : 0,
       programs: programSummaries,
     }
-  }, [plan, programs, allCourses, catalogCourses])
+  }, [plan, programs, index])
 }
 
 function PlanSelector({

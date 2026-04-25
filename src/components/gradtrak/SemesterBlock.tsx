@@ -1,7 +1,8 @@
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo, useRef, useEffect, memo } from 'react'
 import { useGradtrakStore } from '@/stores/gradtrakStore'
 import { useDataStore } from '@/stores/dataStore'
 import { useAllCoursesStore } from '@/stores/allCoursesStore'
+import { useCourseIndex } from '@/hooks/useCourseIndex'
 import { requirementsCourseCouldSatisfy } from '@/utils/requirementMatcher'
 import { missingPrereqsFor } from '@/utils/prereqCheck'
 import { lookupCourse } from '@/utils/courseLookup'
@@ -17,6 +18,19 @@ const TERM_THEME = {
   Summer: { dot: 'bg-cal-gold', text: 'text-cal-gold', accent: 'border-cal-gold/40', tint: 'bg-cal-gold/[0.04]' },
 } as const
 
+/**
+ * Per-row data shape used by CourseRow. Computed ONCE per SemesterBlock
+ * render (in a single useMemo over all of the semester's courses) so
+ * adding/removing a course doesn't re-do the hot work in every other row.
+ */
+interface CourseRowData {
+  code: string
+  idx: number
+  info: { title: string; units: number } | undefined
+  reqMatches: ReturnType<typeof requirementsCourseCouldSatisfy>
+  missingPrereqs: string[]
+}
+
 export default function SemesterBlock({ semester }: SemesterBlockProps) {
   const removeSemester = useGradtrakStore((s) => s.removeSemester)
   const addCourse = useGradtrakStore((s) => s.addCourseToSemester)
@@ -25,17 +39,15 @@ export default function SemesterBlock({ semester }: SemesterBlockProps) {
   const selectedProgramIds = useGradtrakStore((s) => s.selectedProgramIds)
   const allSemesters = useGradtrakStore((s) => s.semesters)
   const allCourses = useDataStore((s) => s.courses)
-  const catalogCourses = useAllCoursesStore((s) => s.courses)
   const searchAllCourses = useAllCoursesStore((s) => s.searchCourses)
   const allCoursesLoaded = useAllCoursesStore((s) => s.isLoaded)
+  const index = useCourseIndex()
 
   const [openReqsFor, setOpenReqsFor] = useState<string | null>(null)
   const selectedPrograms = useMemo(
     () => programs.filter((p) => selectedProgramIds.includes(p.id)),
     [programs, selectedProgramIds]
   )
-
-  const lookup = (code: string) => lookupCourse(code, allCourses, catalogCourses)
 
   const [adding, setAdding] = useState(false)
   const [query, setQuery] = useState('')
@@ -71,9 +83,28 @@ export default function SemesterBlock({ semester }: SemesterBlockProps) {
     return results
   }, [query, allCourses, allCoursesLoaded, searchAllCourses])
 
-  const totalUnits = semester.courseCodes.reduce((sum, code) => {
-    return sum + (lookup(code)?.units || 0)
-  }, 0)
+  // Build all per-row data ONCE per render. Without this, each <CourseRow>
+  // would re-call lookupCourse + requirementsCourseCouldSatisfy +
+  // missingPrereqsFor inline — and React would call them on every render of
+  // every row, even rows whose data hadn't changed. With the work pre-baked
+  // at the parent level + React.memo on the row, only rows whose data shape
+  // changed actually re-render.
+  const rowData: CourseRowData[] = useMemo(() => {
+    return semester.courseCodes.map((code, idx) => ({
+      code,
+      idx,
+      info: lookupCourse(code, index),
+      reqMatches: selectedPrograms.length > 0
+        ? requirementsCourseCouldSatisfy(code, selectedPrograms, index)
+        : [],
+      missingPrereqs: missingPrereqsFor(code, semester, allSemesters, index).missing,
+    }))
+  }, [semester, allSemesters, selectedPrograms, index])
+
+  const totalUnits = useMemo(
+    () => rowData.reduce((sum, r) => sum + (r.info?.units || 0), 0),
+    [rowData]
+  )
 
   const theme = TERM_THEME[semester.term]
   const yearShort = String(semester.year).slice(-2)
@@ -88,7 +119,6 @@ export default function SemesterBlock({ semester }: SemesterBlockProps) {
 
       {/* HEADER */}
       <div className="relative flex items-stretch border-b border-border">
-        {/* Left: term badge */}
         <div className="flex items-center gap-3.5 px-5 py-4">
           <div className="relative flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-md border border-border bg-bg-input">
             <span className={`mono text-[8.5px] font-bold uppercase tracking-wider ${theme.text}`}>
@@ -110,10 +140,8 @@ export default function SemesterBlock({ semester }: SemesterBlockProps) {
           </div>
         </div>
 
-        {/* Spacer */}
         <div className="flex-1" />
 
-        {/* Right: stats + remove */}
         <div className="flex items-center gap-4 px-5">
           <div className="flex items-center gap-3 border-l border-border pl-4">
             <div className="text-right">
@@ -145,108 +173,19 @@ export default function SemesterBlock({ semester }: SemesterBlockProps) {
 
       {/* COURSES */}
       <div className="relative p-3.5">
-        {semester.courseCodes.length === 0 ? (
+        {rowData.length === 0 ? (
           <p className="px-1 py-1.5 text-[11.5px] italic text-text-muted">No courses yet — add your first below.</p>
         ) : (
           <div className="space-y-1.5">
-            {semester.courseCodes.map((code, idx) => {
-              const c = lookup(code)
-              const reqMatches = selectedPrograms.length > 0
-                ? requirementsCourseCouldSatisfy(code, selectedPrograms, allCourses, catalogCourses)
-                : []
-              const isOpen = openReqsFor === code
-              return (
-                <div key={code}>
-                  <div
-                    className={`group/course relative flex items-center gap-3 rounded-md border px-3 py-2 transition-all ${
-                      isOpen ? 'border-cal-gold/40 bg-bg-input' : 'border-border-input/60 bg-bg-input/40 hover:border-cal-gold/30 hover:bg-bg-input'
-                    }`}
-                  >
-                    {/* Index marker */}
-                    <span className="mono w-4 shrink-0 text-[9.5px] font-semibold text-text-muted/60">
-                      {String(idx + 1).padStart(2, '0')}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setOpenReqsFor(isOpen ? null : code)}
-                      className="min-w-0 flex-1 text-left"
-                      title={reqMatches.length > 0 ? `Could satisfy ${reqMatches.length} requirement(s)` : 'No requirement matches'}
-                    >
-                      <div className="flex items-baseline gap-2">
-                        <span className="mono text-[12.5px] font-semibold text-text-primary">{code}</span>
-                        {c && (
-                          <span className="truncate text-[11.5px] text-text-secondary">{c.title}</span>
-                        )}
-                      </div>
-                    </button>
-                    <div className="flex shrink-0 items-center gap-3">
-                      {(() => {
-                        const { missing } = missingPrereqsFor(code, semester, allSemesters, catalogCourses)
-                        return missing.length > 0 ? (
-                          <span
-                            className="inline-flex items-center gap-1 rounded bg-wellman/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-wellman ring-1 ring-wellman/30"
-                            title={`Missing prereq${missing.length !== 1 ? 's' : ''}: ${missing.join(', ')}`}
-                          >
-                            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                              <line x1="12" y1="9" x2="12" y2="13" />
-                              <line x1="12" y1="17" x2="12.01" y2="17" />
-                            </svg>
-                            prereq
-                          </span>
-                        ) : null
-                      })()}
-                      {reqMatches.length > 0 && (
-                        <button
-                          onClick={() => setOpenReqsFor(isOpen ? null : code)}
-                          className={`mono flex items-center gap-1 rounded px-1.5 py-0.5 text-[9.5px] font-bold transition-colors ${
-                            isOpen
-                              ? 'bg-cal-gold/20 text-cal-gold'
-                              : 'bg-cal-gold/10 text-cal-gold/80 hover:bg-cal-gold/20'
-                          }`}
-                          title="Click to see which requirements"
-                        >
-                          {reqMatches.length} req{reqMatches.length !== 1 ? 's' : ''}
-                        </button>
-                      )}
-                      {c && (
-                        <span className="mono text-[10px] font-medium text-cal-gold/80">{c.units}u</span>
-                      )}
-                      <button
-                        onClick={() => removeCourse(semester.id, code)}
-                        className="flex h-5 w-5 items-center justify-center rounded text-text-muted opacity-0 transition-all hover:bg-wellman/15 hover:text-wellman group-hover/course:opacity-100"
-                        title="Remove course"
-                      >
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <line x1="18" y1="6" x2="6" y2="18" />
-                          <line x1="6" y1="6" x2="18" y2="18" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                  {isOpen && reqMatches.length > 0 && (
-                    <div className="animate-slide-down ml-7 mt-1 rounded-md border border-cal-gold/20 bg-bg-input/40 px-2.5 py-2">
-                      <div className="mono mb-1.5 text-[9px] font-semibold uppercase tracking-wider text-cal-gold/80">
-                        Could satisfy across {new Set(reqMatches.map((m) => m.programId)).size} program{new Set(reqMatches.map((m) => m.programId)).size !== 1 ? 's' : ''}
-                      </div>
-                      <div className="space-y-1">
-                        {reqMatches.map((m, i) => (
-                          <div key={i} className="flex items-baseline justify-between gap-2 text-[10.5px]">
-                            <div className="min-w-0 flex-1">
-                              <span className="text-text-primary">{m.reqName}</span>
-                              <span className="ml-1.5 text-text-muted">· {m.groupName}</span>
-                            </div>
-                            <span className="mono shrink-0 text-[9px] uppercase tracking-wider text-cal-gold/70">
-                              {m.programName.length > 20 ? m.programName.slice(0, 18) + '…' : m.programName}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
+            {rowData.map((row) => (
+              <CourseRow
+                key={row.code}
+                row={row}
+                isOpen={openReqsFor === row.code}
+                onToggle={() => setOpenReqsFor(openReqsFor === row.code ? null : row.code)}
+                onRemove={() => removeCourse(semester.id, row.code)}
+              />
+            ))}
           </div>
         )}
 
@@ -353,3 +292,103 @@ export default function SemesterBlock({ semester }: SemesterBlockProps) {
     </div>
   )
 }
+
+/* ─────────── Course row, isolated + memoized ─────────── */
+
+interface CourseRowProps {
+  row: CourseRowData
+  isOpen: boolean
+  onToggle: () => void
+  onRemove: () => void
+}
+
+const CourseRow = memo(function CourseRow({ row, isOpen, onToggle, onRemove }: CourseRowProps) {
+  const { code, idx, info, reqMatches, missingPrereqs } = row
+  return (
+    <div>
+      <div
+        className={`group/course relative flex items-center gap-3 rounded-md border px-3 py-2 transition-all ${
+          isOpen ? 'border-cal-gold/40 bg-bg-input' : 'border-border-input/60 bg-bg-input/40 hover:border-cal-gold/30 hover:bg-bg-input'
+        }`}
+      >
+        <span className="mono w-4 shrink-0 text-[9.5px] font-semibold text-text-muted/60">
+          {String(idx + 1).padStart(2, '0')}
+        </span>
+        <button
+          type="button"
+          onClick={onToggle}
+          className="min-w-0 flex-1 text-left"
+          title={reqMatches.length > 0 ? `Could satisfy ${reqMatches.length} requirement(s)` : 'No requirement matches'}
+        >
+          <div className="flex items-baseline gap-2">
+            <span className="mono text-[12.5px] font-semibold text-text-primary">{code}</span>
+            {info && (
+              <span className="truncate text-[11.5px] text-text-secondary">{info.title}</span>
+            )}
+          </div>
+        </button>
+        <div className="flex shrink-0 items-center gap-3">
+          {missingPrereqs.length > 0 && (
+            <span
+              className="inline-flex items-center gap-1 rounded bg-wellman/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-wellman ring-1 ring-wellman/30"
+              title={`Missing prereq${missingPrereqs.length !== 1 ? 's' : ''}: ${missingPrereqs.join(', ')}`}
+            >
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+              prereq
+            </span>
+          )}
+          {reqMatches.length > 0 && (
+            <button
+              onClick={onToggle}
+              className={`mono flex items-center gap-1 rounded px-1.5 py-0.5 text-[9.5px] font-bold transition-colors ${
+                isOpen
+                  ? 'bg-cal-gold/20 text-cal-gold'
+                  : 'bg-cal-gold/10 text-cal-gold/80 hover:bg-cal-gold/20'
+              }`}
+              title="Click to see which requirements"
+            >
+              {reqMatches.length} req{reqMatches.length !== 1 ? 's' : ''}
+            </button>
+          )}
+          {info && (
+            <span className="mono text-[10px] font-medium text-cal-gold/80">{info.units}u</span>
+          )}
+          <button
+            onClick={onRemove}
+            className="flex h-5 w-5 items-center justify-center rounded text-text-muted opacity-0 transition-all hover:bg-wellman/15 hover:text-wellman group-hover/course:opacity-100"
+            title="Remove course"
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      {isOpen && reqMatches.length > 0 && (
+        <div className="animate-slide-down ml-7 mt-1 rounded-md border border-cal-gold/20 bg-bg-input/40 px-2.5 py-2">
+          <div className="mono mb-1.5 text-[9px] font-semibold uppercase tracking-wider text-cal-gold/80">
+            Could satisfy across {new Set(reqMatches.map((m) => m.programId)).size} program{new Set(reqMatches.map((m) => m.programId)).size !== 1 ? 's' : ''}
+          </div>
+          <div className="space-y-1">
+            {reqMatches.map((m, i) => (
+              <div key={i} className="flex items-baseline justify-between gap-2 text-[10.5px]">
+                <div className="min-w-0 flex-1">
+                  <span className="text-text-primary">{m.reqName}</span>
+                  <span className="ml-1.5 text-text-muted">· {m.groupName}</span>
+                </div>
+                <span className="mono shrink-0 text-[9px] uppercase tracking-wider text-cal-gold/70">
+                  {m.programName.length > 20 ? m.programName.slice(0, 18) + '…' : m.programName}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+})

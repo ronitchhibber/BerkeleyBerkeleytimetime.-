@@ -9,8 +9,7 @@
 import { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useGradtrakStore } from '@/stores/gradtrakStore'
-import { useDataStore } from '@/stores/dataStore'
-import { useAllCoursesStore } from '@/stores/allCoursesStore'
+import { useCourseIndex } from '@/hooks/useCourseIndex'
 import { evaluateProgram } from '@/utils/requirementMatcher'
 import { buildPlanPathPrompt, copyToClipboard } from '@/utils/llmPrompts'
 import { totalUnits as sumUnits } from '@/utils/courseLookup'
@@ -36,24 +35,20 @@ export default function GraduationPlanner({ onClose }: { onClose: () => void }) 
   const selectedIds = useGradtrakStore((s) => s.selectedProgramIds)
   const semesters = useGradtrakStore((s) => s.semesters)
   const overrides = useGradtrakStore((s) => s.manualOverrides)
-  const allCourses = useDataStore((s) => s.courses)
-  const catalogCourses = useAllCoursesStore((s) => s.courses)
+  const index = useCourseIndex()
 
   const [targetUnitsPerSem, setTargetUnitsPerSem] = useState(14)
   const [includeSummer, setIncludeSummer] = useState(false)
 
   const taken = useMemo(() => semesters.flatMap((s) => s.courseCodes), [semesters])
-  const totalUnitsTaken = useMemo(
-    () => sumUnits(taken, allCourses, catalogCourses),
-    [taken, allCourses, catalogCourses]
-  )
+  const totalUnitsTaken = useMemo(() => sumUnits(taken, index), [taken, index])
 
   const remaining = useMemo(() => {
     const selectedPrograms = programs.filter((p) => selectedIds.includes(p.id))
     const reqsLeft: { programName: string; programType: string; groupName: string; reqName: string; estUnits: number; programId: string; reqId: string }[] = []
 
     for (const p of selectedPrograms) {
-      const progress = evaluateProgram(p, taken, allCourses, catalogCourses)
+      const progress = evaluateProgram(p, taken, index)
       for (const g of progress.groups) {
         const programGroup = p.groups.find((pg) => pg.id === g.groupId)
         if (!programGroup) continue
@@ -80,7 +75,7 @@ export default function GraduationPlanner({ onClose }: { onClose: () => void }) 
       }
     }
     return reqsLeft
-  }, [programs, selectedIds, taken, allCourses, catalogCourses, overrides])
+  }, [programs, selectedIds, taken, index, overrides])
 
   const futureTerms = includeSummer
     ? NEXT_TERMS.slice(0, 9)
@@ -229,13 +224,12 @@ function AskClaudeBlock() {
   const plans = useGradtrakStore((s) => s.plans)
   const activeId = useGradtrakStore((s) => s.activePlanId)
   const programs = useGradtrakStore((s) => s.programs)
-  const allCourses = useDataStore((s) => s.courses)
-  const catalogCourses = useAllCoursesStore((s) => s.courses)
+  const index = useCourseIndex()
   const plan = plans.find((p) => p.id === activeId) || plans[0]
   if (!plan) return null
 
   const handleCopy = async () => {
-    const prompt = buildPlanPathPrompt({ plan, programs, allCourses, catalogCourses })
+    const prompt = buildPlanPathPrompt({ plan, programs, index })
     const ok = await copyToClipboard(prompt)
     if (!ok) {
       window.prompt('Copy this prompt and paste into Claude:', prompt)

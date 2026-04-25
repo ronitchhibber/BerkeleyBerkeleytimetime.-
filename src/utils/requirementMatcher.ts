@@ -1,29 +1,12 @@
-import type { Course } from '@/types'
 import type { AllCourse } from '@/stores/allCoursesStore'
 import type {
   Program, RequirementRule, RequirementProgress, GroupProgress, ProgramProgress,
 } from '@/types/gradtrak'
+import { type CourseIndex, normalizeCode } from './courseIndex'
 
-/**
- * Normalize a course code into a single canonical form.
- *
- * Berkeley's catalog uses tight 6-letter subject codes (CYPLAN, ENVDES,
- * POLSCI, PUBPOL, COMLIT, MECENG, CIVENG, INDENG, BIOENG, MATSCI,
- * HISTART, LDARCH, NUCENG, ...). Program / transcript data sometimes shows
- * the same subject spaced out for readability ("CY PLAN 110", "ENV DES 1",
- * "POL SCI 137"). Collapse all whitespace in the subject portion so both
- * forms compare equal.
- *
- * Course numbers may be prefixed with a single letter (C cross-listed,
- * H honors, N concurrent, R reading & comp, W online), e.g. "ECON C3",
- * "PUBPOL R1A". That space is preserved.
- */
-function normalizeCode(code: string): string {
-  const upper = code.replace(/\s+/g, ' ').trim().toUpperCase()
-  const m = upper.match(/^(.+?)\s+([A-Z]?\d+[A-Z]*)$/)
-  if (!m) return upper
-  return m[1].replace(/\s+/g, '') + ' ' + m[2]
-}
+// Re-export normalizeCode so existing call sites that imported it from this
+// module keep working. (Tests + a couple of utilities reach in for this.)
+export { normalizeCode } from './courseIndex'
 
 function parseRange(pattern: string): { subject: string; min: number; max: number } | null {
   const m = pattern.match(/^([A-Z][A-Z\s,&]*)\s*(\d+[A-Z]*)\s*-\s*(\d+[A-Z]*)$/i)
@@ -84,123 +67,11 @@ function findMatchingCourses(takenCodes: string[], from: string[]): string[] {
   return [...matches]
 }
 
-function unitsForCourse(courseCode: string, allCourses: Course[]): number {
-  const norm = normalizeCode(courseCode)
-  const course = allCourses.find((c) => normalizeCode(c.code) === norm)
-  return course?.units || 4
-}
-
-function uniReqsForCourse(courseCode: string, catalogCourses?: AllCourse[]): string[] {
-  const norm = normalizeCode(courseCode)
-  const a = catalogCourses?.find((x) => normalizeCode(x.code) === norm)
-  return (a as { universityReqs?: string[] } | undefined)?.universityReqs || []
-}
-
-function breadthsForCourse(courseCode: string, allCourses: Course[], catalogCourses?: AllCourse[]): string[] {
-  const norm = normalizeCode(courseCode)
-  // Try Fall 2026 catalog first (has rich lsBreadth)
-  const c = allCourses.find((c) => normalizeCode(c.code) === norm)
-  if (c?.requirements?.lsBreadth?.length) return c.requirements.lsBreadth
-  // Berkeleytime data
-  const a = catalogCourses?.find((x) => normalizeCode(x.code) === norm)
-  const official = a?.breadths || []
-  // Augment with heuristic detection for unambiguous cases berkeleytime missed.
-  // Only add breadths not already officially tagged.
-  const heuristic = inferBreadthsFromMetadata(norm, a?.title || c?.title || '')
-  for (const h of heuristic) {
-    if (!official.some((o) => o.toLowerCase() === h.toLowerCase())) {
-      official.push(h)
-    }
-  }
-  return official
-}
-
-/**
- * Unambiguous heuristic rules to catch courses berkeleytime's catalogSearch
- * mistags or omits. Conservative: only fires on strong signals.
- *
- * Each rule is keyword OR subject-code based, picked to minimize false
- * positives. Berkeleytime data is the source of truth — these only fire
- * when berkeleytime has nothing tagged.
- */
-function inferBreadthsFromMetadata(code: string, title: string): string[] {
-  const t = title.toLowerCase()
-  const [subject] = code.split(' ')
-  const breadths: string[] = []
-
-  // International Studies
-  if (
-    /\bstudy abroad\b|\bstudying abroad\b|\babroad program\b|\bglobal citizen|\bglobalization\b|\bglobal studies\b|\binternational stud|\bcomparative.{0,20}politic|\bworld history\b/.test(t) ||
-    subject === 'GLOBAL' || subject === 'IAS'
-  ) {
-    breadths.push('International Studies')
-  }
-
-  // Historical Studies — clear historical signal
-  if (
-    /\bhistory of\b|\bhistorical\b|\b(?:ancient|medieval|modern|colonial|imperial)\s+\w+\s+history\b/.test(t) ||
-    subject === 'HISTORY' || subject === 'HISTART' || subject === 'CLASSIC'
-  ) {
-    breadths.push('Historical Studies')
-  }
-
-  // Philosophy & Values — explicit philosophy/ethics terms
-  if (
-    /\bethics?\b|\bmoral philosophy\b|\bbioethics\b|\bphilosophy of\b/.test(t) ||
-    subject === 'PHILOS'
-  ) {
-    breadths.push('Philosophy & Values')
-  }
-
-  // Arts & Literature — humanities production/criticism
-  if (
-    /\bliterature\b|\bpoetry\b|\b(?:cinema|film) studies\b|\b(?:music|art) (?:history|theory|composition)\b|\bcreative writing\b|\bdrama\b|\btheater\b|\bperformance\b/.test(t) ||
-    subject === 'ART' || subject === 'MUSIC' || subject === 'THEATER' || subject === 'FILM' || subject === 'COMLIT'
-  ) {
-    breadths.push('Arts & Literature')
-  }
-
-  // Biological Science
-  if (
-    /\b(?:cell|molecular|developmental|evolutionary|systems) biology\b|\bgenetics\b|\bphysiology\b|\bneurobiolog/.test(t) ||
-    subject === 'BIOLOGY' || subject === 'MCELLBI' || subject === 'INTEGBI' || subject === 'PLANTBI' || subject === 'NEU' || subject === 'NEUROSC'
-  ) {
-    breadths.push('Biological Science')
-  }
-
-  // Physical Science
-  if (
-    /\b(?:classical|modern|quantum|statistical) (?:mechanics|physics)\b|\bthermodynamics\b|\borganic chemistry\b|\bphysical chemistry\b|\bastronomy\b|\bgeology\b/.test(t) ||
-    subject === 'PHYSICS' || subject === 'CHEM' || subject === 'ASTRON' || subject === 'EPS'
-  ) {
-    breadths.push('Physical Science')
-  }
-
-  // Social & Behavioral Sciences
-  if (
-    /\b(?:micro|macro)economics\b|\bsociology of\b|\bsocial psychology\b|\bbehavioral economics\b|\bpolitical science\b|\bpublic policy\b/.test(t) ||
-    subject === 'ECON' || subject === 'POLSCI' || subject === 'PSYCH' || subject === 'SOCIOL' || subject === 'ANTHRO' || subject === 'COGSCI' || subject === 'PUBPOL'
-  ) {
-    breadths.push('Social & Behavioral Sciences')
-  }
-
-  // American Cultures — most reliable signal is "AC" suffix in course code
-  if (
-    /\b(?:american )?(?:cultures?|race and )(?:in (?:the )?(?:us|america))?\b/i.test(t) ||
-    /\bAC$/i.test(code.split(' ')[1] || '')
-  ) {
-    breadths.push('American Cultures')
-  }
-
-  return breadths
-}
-
 export function evaluateRule(
   rule: RequirementRule,
   takenCodes: string[],
-  allCourses: Course[],
+  index: CourseIndex,
   consumedCodes: Set<string>,
-  catalogCourses?: AllCourse[]
 ): { satisfied: boolean; matchedCourses: string[]; remaining: number; total: number; unitsCompleted?: number; unitsRequired?: number } {
   const availableTaken = takenCodes.filter((c) => !consumedCodes.has(normalizeCode(c)))
 
@@ -209,7 +80,7 @@ export function evaluateRule(
     const count = rule.count ?? 1
     const matched: string[] = []
     for (const taken of availableTaken) {
-      const breadths = breadthsForCourse(taken, allCourses, catalogCourses).map((b) => b.toLowerCase())
+      const breadths = index.breadths(taken).map((b) => b.toLowerCase())
       if (breadths.includes(wanted)) {
         matched.push(normalizeCode(taken))
         if (matched.length >= count) break
@@ -228,7 +99,7 @@ export function evaluateRule(
     const count = rule.count ?? 1
     const matched: string[] = []
     for (const taken of availableTaken) {
-      const reqs = uniReqsForCourse(taken, catalogCourses).map((r) => r.toLowerCase())
+      const reqs = index.uniReqs(taken).map((r) => r.toLowerCase())
       if (reqs.includes(wanted)) {
         matched.push(normalizeCode(taken))
         if (matched.length >= count) break
@@ -244,9 +115,7 @@ export function evaluateRule(
 
   if (rule.type === 'total-units') {
     let totalUnits = 0
-    for (const taken of takenCodes) {
-      totalUnits += unitsForCourse(taken, allCourses) || (catalogCourses?.find((c) => normalizeCode(c.code) === normalizeCode(taken))?.units ?? 0)
-    }
+    for (const taken of takenCodes) totalUnits += index.units(taken) ?? 0
     return {
       satisfied: totalUnits >= rule.units,
       matchedCourses: [],
@@ -258,12 +127,9 @@ export function evaluateRule(
   }
 
   if (rule.type === 'senior-residence') {
-    // Sum units in last 30+ units (Berkeley senior residence: 24 units in last 2 semesters at Berkeley)
-    // Approximation: sum units from the most recent semester(s)
+    // Approximation: sum units from the most recent ~12 courses ≈ 2 semesters
     let totalUnits = 0
-    for (const taken of takenCodes.slice(-12)) { // last ~12 courses ≈ 2 semesters
-      totalUnits += unitsForCourse(taken, allCourses) || (catalogCourses?.find((c) => normalizeCode(c.code) === normalizeCode(taken))?.units ?? 0)
-    }
+    for (const taken of takenCodes.slice(-12)) totalUnits += index.units(taken) ?? 0
     return {
       satisfied: totalUnits >= rule.units,
       matchedCourses: [],
@@ -313,7 +179,7 @@ export function evaluateRule(
     let totalUnits = 0
     const used: string[] = []
     for (const m of matches) {
-      const u = unitsForCourse(m, allCourses)
+      const u = index.units(m) ?? 0
       totalUnits += u
       used.push(m)
       if (totalUnits >= rule.units) break
@@ -332,37 +198,28 @@ export function evaluateRule(
 }
 
 /**
- * Optimal bipartite matching for a group of breadth requirements.
- * Each course may satisfy multiple breadths, but each course can only be
- * assigned to ONE breadth requirement. Returns: requirementId → matched course.
- *
- * Greedy bug: iterating requirements in order can assign a multi-breadth
- * course to its first match, leaving subsequent requirements unsatisfied
- * when a single-breadth course could have covered this one.
- *
- * Fix: sort requirements by scarcity (fewest candidate courses first),
- * then among candidates, pick the one with the fewest OTHER unsatisfied
- * breadths it could still fulfill. This approximates Hungarian matching
- * for small N (7 breadths) without adding a full LAP solver.
+ * Optimal bipartite matching for breadth-only requirement groups. Each course
+ * may satisfy multiple breadths but can only be assigned to one. Sort by
+ * scarcity, then for each requirement pick the candidate course that covers
+ * the FEWEST other unmatched breadths — preserves versatile courses for
+ * uniquely-needed slots. ≈ Hungarian matching, fine for N=7 breadths.
  */
 function matchBreadthGroup(
   breadthReqs: { id: string; breadth: string; count: number }[],
   availableTaken: string[],
-  allCourses: Course[],
-  catalogCourses?: AllCourse[]
+  index: CourseIndex,
 ): Map<string, string[]> {
   const candidatesPerReq = new Map<string, string[]>()
   for (const req of breadthReqs) {
     const wanted = req.breadth.toLowerCase()
     const cands = availableTaken.filter((c) =>
-      breadthsForCourse(c, allCourses, catalogCourses).some((b) => b.toLowerCase() === wanted)
+      index.breadths(c).some((b) => b.toLowerCase() === wanted)
     )
     candidatesPerReq.set(req.id, cands)
   }
 
   const result = new Map<string, string[]>()
   const consumedLocal = new Set<string>()
-  // Process requirements in order of scarcity (fewest candidates first).
   const reqOrder = [...breadthReqs].sort(
     (a, b) => (candidatesPerReq.get(a.id)!.length) - (candidatesPerReq.get(b.id)!.length)
   )
@@ -373,13 +230,11 @@ function matchBreadthGroup(
       result.set(req.id, [])
       continue
     }
-    // Pick the candidate that covers the FEWEST other still-unmatched breadths.
-    // This preserves versatile courses for their unique assignments.
     const unmatchedReqs = reqOrder.filter((r) => !result.has(r.id) && r.id !== req.id)
     let best = cands[0]
     let bestScore = Infinity
     for (const c of cands) {
-      const bset = new Set(breadthsForCourse(c, allCourses, catalogCourses).map((b) => b.toLowerCase()))
+      const bset = new Set(index.breadths(c).map((b) => b.toLowerCase()))
       const overlap = unmatchedReqs.filter((r) => bset.has(r.breadth.toLowerCase())).length
       if (overlap < bestScore) {
         bestScore = overlap
@@ -395,8 +250,7 @@ function matchBreadthGroup(
 export function evaluateProgram(
   program: Program,
   takenCodes: string[],
-  allCourses: Course[],
-  catalogCourses?: AllCourse[]
+  index: CourseIndex,
 ): ProgramProgress {
   const consumed = new Set<string>()
   const groupProgresses: GroupProgress[] = []
@@ -405,8 +259,6 @@ export function evaluateProgram(
     const reqProgresses: RequirementProgress[] = []
     let satisfiedCount = 0
 
-    // Breadth-only group → optimal bipartite matcher (avoids greedy waste of
-    // multi-breadth courses on requirements they're not uniquely needed for).
     const allBreadth = group.requirements.every((r) => r.rule.type === 'breadth')
     let breadthAssignments: Map<string, string[]> | null = null
     if (allBreadth && group.requirements.length > 1) {
@@ -416,7 +268,7 @@ export function evaluateProgram(
         breadth: (r.rule as { breadth: string }).breadth,
         count: (r.rule as { count?: number }).count ?? 1,
       }))
-      breadthAssignments = matchBreadthGroup(breadthReqs, availableTaken, allCourses, catalogCourses)
+      breadthAssignments = matchBreadthGroup(breadthReqs, availableTaken, index)
     }
 
     for (const req of group.requirements) {
@@ -429,7 +281,7 @@ export function evaluateProgram(
             remaining: Math.max(0, count - matched.length),
             total: count,
           }
-        : evaluateRule(req.rule, takenCodes, allCourses, consumed, catalogCourses)
+        : evaluateRule(req.rule, takenCodes, index, consumed)
 
       result.matchedCourses.forEach((c) => consumed.add(normalizeCode(c)))
       reqProgresses.push({
@@ -462,7 +314,8 @@ export function evaluateProgram(
 
 /**
  * Discover all eligible courses for a requirement across the all-time
- * catalog. Handles every rule type, including breadth + university-req.
+ * catalog. Iterates the catalog once (capped at `limit`); the index isn't
+ * useful here because the access pattern is "scan all → keep matches".
  */
 export function eligibleCoursesForRule(
   rule: RequirementRule,
@@ -509,24 +362,22 @@ export function eligibleCoursesForRule(
     return matches
   }
 
-  // total-units / senior-residence don't have specific courses
   return []
 }
 
 /**
- * For a given course code + the user's selected programs, find every
- * requirement across all programs that this course COULD satisfy. Used by
- * the click-course-see-reqs UX so users can spot cross-program double counts.
+ * For a course code + the user's selected programs, find every requirement
+ * across all programs that the course COULD satisfy. Used by the
+ * click-course-see-reqs UX to spot cross-program double counts.
  */
 export function requirementsCourseCouldSatisfy(
   courseCode: string,
   programs: Program[],
-  allCourses: Course[],
-  catalogCourses?: AllCourse[]
+  index: CourseIndex,
 ): { programId: string; programName: string; groupName: string; reqId: string; reqName: string }[] {
   const norm = normalizeCode(courseCode)
-  const breadths = breadthsForCourse(courseCode, allCourses, catalogCourses).map((b) => b.toLowerCase())
-  const uniReqs = uniReqsForCourse(courseCode, catalogCourses).map((r) => r.toLowerCase())
+  const breadths = index.breadths(courseCode).map((b) => b.toLowerCase())
+  const uniReqs = index.uniReqs(courseCode).map((r) => r.toLowerCase())
   const matches: { programId: string; programName: string; groupName: string; reqId: string; reqName: string }[] = []
 
   for (const p of programs) {
@@ -557,3 +408,6 @@ export function requirementsCourseCouldSatisfy(
   }
   return matches
 }
+
+// Re-export so legacy callers can keep using the empty index when no data is loaded.
+export { EMPTY_COURSE_INDEX } from './courseIndex'

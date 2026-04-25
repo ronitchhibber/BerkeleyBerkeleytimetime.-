@@ -7,8 +7,7 @@
  *  - CSV — flat tabular dump for advisors / parents.
  */
 import type { PlannedSemester, Program } from '@/types/gradtrak'
-import type { AllCourse } from '@/stores/allCoursesStore'
-import type { Course } from '@/types'
+import type { CourseIndex } from './courseIndex'
 import { evaluateProgram, requirementsCourseCouldSatisfy } from './requirementMatcher'
 import { totalUnits as sumUnits, lookupCourse } from './courseLookup'
 
@@ -51,17 +50,16 @@ export function decodePlan(encoded: string): SerializedPlan | null {
 interface CsvInput {
   semesters: PlannedSemester[]
   selectedPrograms: Program[]
-  allCourses: Course[]
-  catalogCourses: AllCourse[]
+  index: CourseIndex
 }
 
-export function exportCsv({ semesters, selectedPrograms, allCourses, catalogCourses }: CsvInput): string {
+export function exportCsv({ semesters, selectedPrograms, index }: CsvInput): string {
   const rows: string[][] = [['Semester', 'Course', 'Title', 'Units', 'Programs', 'Requirements']]
 
   for (const sem of semesters) {
     for (const code of sem.courseCodes) {
-      const info = lookupCourse(code, allCourses, catalogCourses)
-      const matches = requirementsCourseCouldSatisfy(code, selectedPrograms, allCourses, catalogCourses)
+      const info = lookupCourse(code, index)
+      const matches = requirementsCourseCouldSatisfy(code, selectedPrograms, index)
       rows.push([
         `${sem.term} ${sem.year}`,
         code,
@@ -77,10 +75,10 @@ export function exportCsv({ semesters, selectedPrograms, allCourses, catalogCour
   rows.push([])
   rows.push(['SUMMARY', '', '', '', '', ''])
   rows.push(['Total courses', String(allTaken.length), '', '', '', ''])
-  rows.push(['Total units', String(sumUnits(allTaken, allCourses, catalogCourses)), '', '', '', ''])
+  rows.push(['Total units', String(sumUnits(allTaken, index)), '', '', '', ''])
 
   for (const p of selectedPrograms) {
-    const progress = evaluateProgram(p, allTaken, allCourses, catalogCourses)
+    const progress = evaluateProgram(p, allTaken, index)
     const sat = progress.groups.reduce((a, g) => a + g.satisfiedCount, 0)
     const total = progress.groups.reduce((a, g) => a + g.totalCount, 0)
     rows.push([`${p.type.toUpperCase()}: ${p.name}`, `${sat}/${total}`, '', '', '', ''])

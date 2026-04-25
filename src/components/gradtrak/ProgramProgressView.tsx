@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useDeferredValue } from 'react'
 import { useGradtrakStore } from '@/stores/gradtrakStore'
-import { useDataStore } from '@/stores/dataStore'
 import { useAllCoursesStore } from '@/stores/allCoursesStore'
-import { evaluateProgram, eligibleCoursesForRule } from '@/utils/requirementMatcher'
+import { useGradtrakProgress } from '@/hooks/useGradtrakProgress'
+import { eligibleCoursesForRule } from '@/utils/requirementMatcher'
 import type { AllCourse } from '@/stores/allCoursesStore'
 
 // Current term used to highlight "offered now" courses in drill-down.
@@ -17,12 +17,18 @@ const TYPE_THEME = {
 } as const
 
 export default function ProgramProgressView() {
-  const programs = useGradtrakStore((s) => s.programs)
-  const selected = useGradtrakStore((s) => s.selectedProgramIds)
-  const semesters = useGradtrakStore((s) => s.semesters)
-  const overrides = useGradtrakStore((s) => s.manualOverrides)
   const toggleOverride = useGradtrakStore((s) => s.toggleOverride)
-  const allCourses = useDataStore((s) => s.courses)
+  // Pull the shared evaluation. takenCodes / selectedPrograms / progresses
+  // all live in one place so this view and GradtrakPage can't disagree.
+  const live = useGradtrakProgress()
+  // Defer the heavy progress render — the audit pane has 100s of DOM nodes
+  // per program. Without this, typing in the SemesterBlock search box
+  // shows visible lag because every keystroke contends with the audit
+  // re-render. With useDeferredValue, React renders the input update at
+  // high priority and the audit catches up after.
+  const { takenCodes, selectedPrograms, entries: progresses } = useDeferredValue(live)
+  // Drill-down (eligibleCoursesForRule) needs the raw catalog to scan; keep
+  // a direct subscription rather than threading it through the shared hook.
   const catalogCourses = useAllCoursesStore((s) => s.courses)
 
   // Track which requirements are expanded to show their eligible courses
@@ -33,33 +39,6 @@ export default function ProgramProgressView() {
       next.has(key) ? next.delete(key) : next.add(key)
       return next
     })
-
-  const takenCodes = useMemo(() => semesters.flatMap((s) => s.courseCodes), [semesters])
-  const selectedPrograms = useMemo(() => programs.filter((p) => selected.includes(p.id)), [programs, selected])
-
-  const progresses = useMemo(
-    () =>
-      selectedPrograms.map((p) => {
-        const raw = evaluateProgram(p, takenCodes, allCourses, catalogCourses)
-        const adjusted = {
-          ...raw,
-          groups: raw.groups.map((g) => {
-            const adjReqs = g.requirements.map((r) => {
-              const overrideKey = `${p.id}:${r.requirementId}`
-              const isOverridden = overrides[overrideKey]
-              return isOverridden && !r.satisfied
-                ? { ...r, satisfied: true, _overridden: true }
-                : { ...r, _overridden: false }
-            })
-            const satisfiedCount = adjReqs.filter((r) => r.satisfied).length
-            return { ...g, requirements: adjReqs, satisfiedCount, satisfied: satisfiedCount === g.totalCount }
-          }),
-        }
-        adjusted.satisfied = adjusted.groups.every((g) => g.satisfied)
-        return { program: p, progress: adjusted }
-      }),
-    [selectedPrograms, takenCodes, allCourses, catalogCourses, overrides]
-  )
 
   if (selectedPrograms.length === 0) {
     return (

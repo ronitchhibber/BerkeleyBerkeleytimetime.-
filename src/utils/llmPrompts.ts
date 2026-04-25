@@ -4,26 +4,24 @@
  */
 import type { Plan } from '@/stores/gradtrakStore'
 import type { Program } from '@/types/gradtrak'
-import type { Course } from '@/types'
-import type { AllCourse } from '@/stores/allCoursesStore'
+import type { CourseIndex } from './courseIndex'
 import { evaluateProgram } from './requirementMatcher'
 import { totalUnits as sumUnits } from './courseLookup'
 
 interface PlanPathInput {
   plan: Plan
   programs: Program[]
-  allCourses: Course[]
-  catalogCourses: AllCourse[]
+  index: CourseIndex
 }
 
-export function buildPlanPathPrompt({ plan, programs, allCourses, catalogCourses }: PlanPathInput): string {
+export function buildPlanPathPrompt({ plan, programs, index }: PlanPathInput): string {
   const taken = plan.semesters.flatMap((s) => s.courseCodes)
-  const totalUnits = sumUnits(taken, allCourses, catalogCourses)
+  const totalUnits = sumUnits(taken, index)
   const selectedPrograms = programs.filter((p) => plan.selectedProgramIds.includes(p.id))
 
   const remainingByProgram: { name: string; type: string; reqs: string[] }[] = []
   for (const p of selectedPrograms) {
-    const progress = evaluateProgram(p, taken, allCourses, catalogCourses)
+    const progress = evaluateProgram(p, taken, index)
     const reqsLeft: string[] = []
     for (const g of progress.groups) {
       const programGroup = p.groups.find((pg) => pg.id === g.groupId)
